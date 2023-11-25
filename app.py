@@ -1,5 +1,5 @@
 """
-This module contains the main Streamlit app.
+This module contains the main Streamlit app for the chatbot.
 """
 
 import streamlit as st
@@ -25,9 +25,18 @@ if not st.session_state.token_valid:
     elif access_token:
         st.error("Please enter a valid token to access the main page.")
 else:
-    # Display the sidebar and main content
-    st.sidebar.title("Sidebar")
-    st.sidebar.write("This is the sidebar content.")
+    st.sidebar.title("Settings")
+    save_indicator = st.sidebar.empty()
 
-    st.title("Main Page")
-    st.write("Welcome to the main page!")
+    uploaded_files = st.sidebar.file_uploader(
+        "Upload some files:",
+        accept_multiple_files=True,
+        on_change=save_indicator.empty,
+    )
+
+    *_, col = st.sidebar.columns(4)
+    if col.button("Save"):
+        save_indicator.success("Settings saved!")
+
+    st.title("Let's Chat!")
+    st.expander("Session State", expanded=False).json(st.session_state)
