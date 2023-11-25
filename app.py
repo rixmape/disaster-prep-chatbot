@@ -4,9 +4,9 @@ This module contains the main Streamlit app for the chatbot.
 
 import streamlit as st
 
-# Initialize a session state variable for token validation
-if "token_valid" not in st.session_state:
-    st.session_state.token_valid = False
+# Initialize session state variables
+st.session_state.setdefault("token_valid", False)
+st.session_state.setdefault("files", [])
 
 # Show the token input only if the token has not been validated yet
 if not st.session_state.token_valid:
@@ -25,18 +25,24 @@ if not st.session_state.token_valid:
     elif access_token:
         st.error("Please enter a valid token to access the main page.")
 else:
-    st.sidebar.title("Settings")
-    save_indicator = st.sidebar.empty()
+    sidebar_message = st.sidebar.empty()
 
-    uploaded_files = st.sidebar.file_uploader(
+    files = st.sidebar.file_uploader(
         "Upload some files:",
         accept_multiple_files=True,
-        on_change=save_indicator.empty,
+        type=["pdf", "txt", "docx", "html", "md", "pptx"],
     )
 
-    *_, col = st.sidebar.columns(4)
+    if files != st.session_state.files:
+        sidebar_message.warning("Unsaved files!")
+
+    *_, col = st.sidebar.columns(4)  # Right align the button
     if col.button("Save"):
-        save_indicator.success("Settings saved!")
+        if files != st.session_state.files:
+            st.session_state.files = files
+            sidebar_message.success("Files saved!")
+        else:
+            sidebar_message.warning("No changes made.")
 
     st.title("Let's Chat!")
     st.expander("Session State", expanded=False).json(st.session_state)
