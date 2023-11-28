@@ -85,8 +85,33 @@ def chat_page():
     )
 
     for message in messages:
-        with st.chat_message(message.role):
-            st.markdown(message.content[0].text.value)
+        text = message.content[0].text
+        assistant_message = st.chat_message(message.role)
+        assistant_message.markdown(text.value)
+
+        citations = [
+            annotation
+            for annotation in text.annotations
+            if annotation.type == "file_citation"
+        ]
+
+        if not citations:
+            continue  # Don't display the citations section if there are none
+
+        citation_container = assistant_message.expander(
+            f"File Citations ({len(citations)})",
+            expanded=False,
+        )
+
+        for index, citation in enumerate(citations):
+            label = f"**{index+1}. {citation.text}:**"
+            quote = "\n".join(
+                [
+                    f"> {line}"
+                    for line in citation.file_citation.quote.split("\n")
+                ]
+            )
+            citation_container.markdown(f"{label}\n{quote}")
 
     if prompt := st.chat_input("What's on your mind?"):
         with st.chat_message("user"):
