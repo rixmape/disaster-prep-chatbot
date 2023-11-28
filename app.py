@@ -72,11 +72,26 @@ def chat_page():
     st.title("Step 3: Let's Chat!")
 
     if "client" not in st.session_state:
-        with st.status("Initializing chatbot..."):
+        with (
+            st.chat_message("assistant"),
+            st.status("Initializing chatbot..."),
+        ):
             initialize_chatbot()
-            st.rerun()
+            st.rerun()  # Refresh the page to update the session state
+
+    messages = st.session_state.client.beta.threads.messages.list(
+        thread_id=st.session_state.thread.id,
+        order="asc",
+    )
+
+    for message in messages:
+        with st.chat_message(message.role):
+            st.markdown(message.content[0].text.value)
 
     if prompt := st.chat_input("What's on your mind?"):
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
         message = st.session_state.client.beta.threads.messages.create(
             thread_id=st.session_state.thread.id,
             role="user",
@@ -88,21 +103,18 @@ def chat_page():
             assistant_id=st.session_state.assistant.id,
         )
 
-        while run.status in ("queued", "in_progress"):
-            run = st.session_state.client.beta.threads.runs.retrieve(
-                thread_id=st.session_state.thread.id,
-                run_id=run.id,
-            )
-            time.sleep(0.5)
+        with (
+            st.chat_message("assistant"),
+            st.status("Waiting for response..."),
+        ):
+            while run.status in ("queued", "in_progress"):
+                run = st.session_state.client.beta.threads.runs.retrieve(
+                    thread_id=st.session_state.thread.id,
+                    run_id=run.id,
+                )
+                time.sleep(0.5)
 
-    messages = st.session_state.client.beta.threads.messages.list(
-        thread_id=st.session_state.thread.id,
-        order="asc",
-    )
-
-    for message in messages:
-        with st.chat_message(message.role):
-            st.markdown(message.content[0].text.value)
+        st.rerun()  # Refresh the page to display new messages
 
 
 if __name__ == "__main__":
