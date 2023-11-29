@@ -59,10 +59,10 @@ def initialize_chatbot():
     file_ids = get_file_ids()
 
     # TODO: Avoid creating a new assistant every time
-    instructions = (
-        st.session_state.config["default_instructions"]
-        + "\n\n"
-        + st.session_state.config["personalities"][st.session_state.personality]
+    instructions = st.session_state.config["default_instructions"].format(
+        personality=st.session_state.config["personalities"][
+            st.session_state.personality
+        ],
     )
     st.session_state.setdefault(
         "assistant",
