@@ -5,9 +5,7 @@ This module contains the main Streamlit app for the chatbot.
 import time
 import streamlit as st
 from openai import OpenAI
-
-CONFIGURATION_PAGE = "configuration"
-CHAT_PAGE = "chat"
+import yaml
 
 
 def token_validation_page():
@@ -29,6 +27,11 @@ def token_validation_page():
 def configuration_page():
     st.title("Step 2: Configure your chatbot")
 
+    st.session_state.personality = st.selectbox(
+        "Select a personality:",
+        options=st.session_state.config["personalities"].keys(),
+    )
+
     st.session_state.files = st.file_uploader(
         "Upload some files:",
         accept_multiple_files=True,
@@ -36,7 +39,7 @@ def configuration_page():
     )
 
     if st.button("Start chatting!"):
-        st.session_state.page = CHAT_PAGE
+        st.session_state.configured = True
 
 
 def initialize_chatbot():
@@ -53,19 +56,47 @@ def initialize_chatbot():
     )
 
     st.write("Uploading files...")
-    file_ids = [
-        st.session_state.client.files.create(file=file, purpose="assistants").id
-        for file in st.session_state.files
-    ]
+    file_ids = get_file_ids()
 
-    st.write("Initializing assistant...")
+    # TODO: Avoid creating a new assistant every time
+    instructions = st.session_state.config["default_instructions"].format(
+        personality=st.session_state.config["personalities"][
+            st.session_state.personality
+        ],
+    )
     st.session_state.setdefault(
         "assistant",
-        st.session_state.client.beta.assistants.update(
-            assistant_id=st.secrets["openai_assistant_id"],
+        st.session_state.client.beta.assistants.create(
+            instructions=instructions,
+            name="Disaster Preparedness Expert",
+            tools=[{"type": "retrieval"}],
+            model="gpt-3.5-turbo-1106",
             file_ids=file_ids,
         ),
     )
+
+
+def get_file_ids():
+    openai_files = {
+        file.filename: file.id
+        for file in st.session_state.client.files.list().data
+    }
+
+    file_ids = []
+
+    for file in st.session_state.files:
+        # TODO: Improve file deduplication by checking file contents
+        if file.name in openai_files:
+            file_id = openai_files[file.name]
+            file_ids.append(file_id)
+        else:
+            file = st.session_state.client.files.create(
+                file=file,
+                purpose="assistants",
+            )
+            file_ids.append(file.id)
+
+    return file_ids
 
 
 def chat_page():
@@ -143,13 +174,17 @@ def chat_page():
 
 
 if __name__ == "__main__":
+    if "config" not in st.session_state:
+        with open("config.yaml", "r", encoding="utf-8") as file:
+            st.session_state.config = yaml.safe_load(file)
+
     st.session_state.setdefault("token_valid", False)
-    st.session_state.setdefault("page", CONFIGURATION_PAGE)
+    st.session_state.setdefault("configured", False)
 
     if not st.session_state.token_valid:
         token_validation_page()
     else:
-        if st.session_state.page == CONFIGURATION_PAGE:
+        if not st.session_state.configured:
             configuration_page()
-        elif st.session_state.page == CHAT_PAGE:
+        else:
             chat_page()
