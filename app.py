@@ -7,9 +7,6 @@ import streamlit as st
 from openai import OpenAI
 import yaml
 
-CONFIGURATION_PAGE = "configuration"
-CHAT_PAGE = "chat"
-
 
 def token_validation_page():
     st.title("Step 1: Validate your token")
@@ -42,7 +39,7 @@ def configuration_page():
     )
 
     if st.button("Start chatting!"):
-        st.session_state.page = CHAT_PAGE
+        st.session_state.configured = True
 
 
 def initialize_chatbot():
@@ -182,12 +179,12 @@ if __name__ == "__main__":
             st.session_state.config = yaml.safe_load(file)
 
     st.session_state.setdefault("token_valid", False)
-    st.session_state.setdefault("page", CONFIGURATION_PAGE)
+    st.session_state.setdefault("configured", False)
 
     if not st.session_state.token_valid:
         token_validation_page()
     else:
-        if st.session_state.page == CONFIGURATION_PAGE:
+        if not st.session_state.configured:
             configuration_page()
-        elif st.session_state.page == CHAT_PAGE:
+        else:
             chat_page()
