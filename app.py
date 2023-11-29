@@ -8,10 +8,13 @@ from openai import OpenAI
 
 CONFIGURATION_PAGE = "configuration"
 CHAT_PAGE = "chat"
+
+DEFAULT_INSTRUCTION = "As a disaster preparedness expert, your main task is to accurately deliver disaster preparedness information using a document database. For each user query, immediately access the database for relevant information. Respond to users with clarity and precision. Aim to provide clear, confident guidance in disaster preparedness, using the database as your key resource. Always maintain professionalism in your interactions. Format your responses into paragraphs only."
+
 PERSONALITY_MAP = {
-    "Friendly and informative": "In your role as a disaster preparedness expert, blend warmth and friendliness with the wealth of information from our document database. When responding to queries, imagine you're having a conversation with a friend, eager to share your knowledge. Your guidance should feel approachable and reassuring, creating a welcoming atmosphere for users seeking advice. Remember, your expertise is not just in the facts you provide but in the supportive and engaging manner in which you deliver them. Let each interaction be a friendly exchange of vital knowledge.",
-    "Direct and concise": "As a disaster preparedness expert, your communication should be direct and to the point. Leverage the document database to provide clear, concise, and accurate responses to user queries. There's no need for embellishment; focus on delivering essential information quickly and efficiently. Your goal is to offer straightforward guidance that users can easily understand and act upon. In every interaction, aim for brevity and precision, ensuring that users receive the most relevant and practical disaster preparedness advice in the most efficient manner possible.",
-    "Original and imaginative": "As a disaster preparedness expert, approach each user query with a creative mindset, utilizing the document database as a wellspring of inspiration. Your responses should not only be accurate but also exhibit a flair for originality, making complex disaster preparedness information engaging and thought-provoking. Envision your role as not just an informant but as a storyteller who brings the world of disaster preparedness to life with imagination and innovation. Remember, each piece of guidance you provide is an opportunity to captivate and educate in equal measure.",
+    "Friendly and informative": "When responding to queries, imagine you're having a conversation with a friend, eager to share your knowledge. Your guidance should feel approachable and reassuring, creating a welcoming atmosphere for users seeking advice.",
+    "Direct and concise": "There's no need for embellishment; focus on delivering essential information quickly and efficiently.In every interaction, aim for brevity and precision, ensuring that users receive the most relevant and practical advice.",
+    "Original and imaginative": "Your responses should not only be accurate but also exhibit a flair for originality. Envision your role as not just an informant but as a storyteller who brings the world of disaster preparedness to life with imagination and innovation.",
 }
 
 
@@ -63,23 +66,44 @@ def initialize_chatbot():
     )
 
     st.write("Uploading files...")
-    file_ids = [
-        st.session_state.client.files.create(file=file, purpose="assistants").id
-        for file in st.session_state.files
-    ]
+    file_ids = get_file_ids()
 
     # TODO: Avoid creating a new assistant every time
     st.write("Initializing assistant...")
+    role_description = f"{DEFAULT_INSTRUCTION}\n\n{PERSONALITY_MAP[st.session_state.personality]}"
     st.session_state.setdefault(
         "assistant",
         st.session_state.client.beta.assistants.create(
-            instructions=PERSONALITY_MAP[st.session_state.personality],
+            instructions=role_description,
             name="Disaster Preparedness Expert",
             tools=[{"type": "retrieval"}],
             model="gpt-3.5-turbo-1106",
             file_ids=file_ids,
         ),
     )
+
+
+def get_file_ids():
+    openai_files = {
+        file.filename: file.id
+        for file in st.session_state.client.files.list().data
+    }
+
+    file_ids = []
+
+    for file in st.session_state.files:
+        # TODO: Improve file deduplication by checking file contents
+        if file.name in openai_files:
+            file_id = openai_files[file.name]
+            file_ids.append(file_id)
+        else:
+            file = st.session_state.client.files.create(
+                file=file,
+                purpose="assistants",
+            )
+            file_ids.append(file.id)
+
+    return file_ids
 
 
 def chat_page():
