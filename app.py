@@ -5,17 +5,10 @@ This module contains the main Streamlit app for the chatbot.
 import time
 import streamlit as st
 from openai import OpenAI
+import yaml
 
 CONFIGURATION_PAGE = "configuration"
 CHAT_PAGE = "chat"
-
-DEFAULT_INSTRUCTION = "As a disaster preparedness expert, your main task is to accurately deliver disaster preparedness information using a document database. For each user query, immediately access the database for relevant information. Respond to users with clarity and precision. Aim to provide clear, confident guidance in disaster preparedness, using the database as your key resource. Always maintain professionalism in your interactions. Format your responses into paragraphs only."
-
-PERSONALITY_MAP = {
-    "Friendly and informative": "When responding to queries, imagine you're having a conversation with a friend, eager to share your knowledge. Your guidance should feel approachable and reassuring, creating a welcoming atmosphere for users seeking advice.",
-    "Direct and concise": "There's no need for embellishment; focus on delivering essential information quickly and efficiently.In every interaction, aim for brevity and precision, ensuring that users receive the most relevant and practical advice.",
-    "Original and imaginative": "Your responses should not only be accurate but also exhibit a flair for originality. Envision your role as not just an informant but as a storyteller who brings the world of disaster preparedness to life with imagination and innovation.",
-}
 
 
 def token_validation_page():
@@ -39,7 +32,7 @@ def configuration_page():
 
     st.session_state.personality = st.selectbox(
         "Select a personality:",
-        options=PERSONALITY_MAP.keys(),
+        options=st.session_state.config["personalities"].keys(),
     )
 
     st.session_state.files = st.file_uploader(
@@ -69,12 +62,15 @@ def initialize_chatbot():
     file_ids = get_file_ids()
 
     # TODO: Avoid creating a new assistant every time
-    st.write("Initializing assistant...")
-    role_description = f"{DEFAULT_INSTRUCTION}\n\n{PERSONALITY_MAP[st.session_state.personality]}"
+    instructions = (
+        st.session_state.config["default_instructions"]
+        + "\n\n"
+        + st.session_state.config["personalities"][st.session_state.personality]
+    )
     st.session_state.setdefault(
         "assistant",
         st.session_state.client.beta.assistants.create(
-            instructions=role_description,
+            instructions=instructions,
             name="Disaster Preparedness Expert",
             tools=[{"type": "retrieval"}],
             model="gpt-3.5-turbo-1106",
@@ -181,6 +177,10 @@ def chat_page():
 
 
 if __name__ == "__main__":
+    if "config" not in st.session_state:
+        with open("config.yaml", "r", encoding="utf-8") as file:
+            st.session_state.config = yaml.safe_load(file)
+
     st.session_state.setdefault("token_valid", False)
     st.session_state.setdefault("page", CONFIGURATION_PAGE)
 
