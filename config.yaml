@@ -10,3 +10,10 @@ personalities:
 
   Original and imaginative: |
     Your responses should not only be accurate but also exhibit a flair for originality. Envision your role as not just an informant but as a storyteller who brings the world of disaster preparedness to life with imagination and innovation.
+
+command_map:
+  explain: |
+    Your task is to provide a detailed and comprehensible explanation of the concept specified in the user's query. Utilize the document database to source accurate and relevant information. Present the explanation in an easily understandable format, simplifying complex aspects where necessary.
+
+  howto: |
+    Your task is to provide step-by-step instructions for the disaster preparedness procedure mentioned in the user's query. Access the document database to ensure the instructions are accurate and relevant. Break down the procedure into clear, actionable steps, making it easy for users to follow.

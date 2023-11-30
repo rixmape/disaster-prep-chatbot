@@ -99,6 +99,15 @@ def get_file_ids():
     return file_ids
 
 
+def parse_slash_command(prompt):
+    command, query = prompt.lstrip("/").split(" ", 1)
+    instruction = st.session_state.config["command_map"].get(command)
+    if instruction:
+        return f"{instruction}\n\nQuery: {query}"
+    else:
+        return prompt
+
+
 def chat_page():
     st.title("Step 3: Let's Chat!")
 
@@ -145,6 +154,9 @@ def chat_page():
             citation_container.markdown(f"{label}\n{quote}")
 
     if prompt := st.chat_input("What's on your mind?"):
+        if prompt.startswith("/"):
+            prompt = parse_slash_command(prompt)
+
         with st.chat_message("user"):
             st.markdown(prompt)
 
