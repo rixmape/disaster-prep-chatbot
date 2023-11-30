@@ -39,7 +39,10 @@ def configuration_page():
     )
 
     if st.button("Start chatting!"):
-        st.session_state.configured = True
+        if not st.session_state.files:
+            st.error("Please upload some files to continue.")
+        else:
+            st.session_state.configured = True
 
 
 def initialize_chatbot():
