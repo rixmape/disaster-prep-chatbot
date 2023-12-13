@@ -122,6 +122,11 @@ def chat_page():
             initialize_chatbot()
             st.rerun()  # Refresh the page to update the session state
 
+    # TODO: Add initial message to the thread. Not currently supported by API.
+    inital_message = st.session_state.config["initial_message"]
+    with st.chat_message("assistant"):
+        st.markdown(inital_message)
+
     messages = st.session_state.client.beta.threads.messages.list(
         thread_id=st.session_state.thread.id,
         order="asc",
