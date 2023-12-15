@@ -103,29 +103,26 @@ def initialize_chatbot():
     )
 
     # TODO: Remove this hack once the document retrieval of the API is fixed
-    doc_content = "Please read and understand the following documents: "
     for file in st.session_state.files:
         if file.name.endswith(".pdf"):
             reader = PyPDF2.PdfReader(BytesIO(file.getvalue()))
-            file_content = ""
-            for page in reader.pages:
-                file_content += page.extract_text()
+            file_content = "".join(page.extract_text() for page in reader.pages)
         else:
             file_content = file.getvalue().decode("utf-8")
 
+        chunk_size = 30000
         chunks = [
-            file_content[i : i + 30000]
-            for i in range(0, len(file_content), 30000)
+            file_content[i : i + chunk_size]
+            for i in range(0, len(file_content), chunk_size)
         ]
+
         for chunk in chunks:
-            doc_content += chunk + "\n\n"
             st.session_state.client.beta.threads.messages.create(
                 thread_id=st.session_state.thread.id,
                 role="user",
-                content=doc_content,
+                content="Please understand this document:\n\n" + chunk,
                 metadata={"hidden": True},
             )
-            doc_content = ""
 
 
 def get_file_ids():
