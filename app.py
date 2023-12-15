@@ -8,6 +8,30 @@ from openai import OpenAI
 import yaml
 
 
+def sidebar():
+    with st.sidebar:
+        st.title("Local Disaster Preparedness Chatbot")
+        st.markdown(st.session_state.config["app_description"])
+
+        if "files" in st.session_state:
+            with st.expander("Uploaded files"):
+                uploaded_file = "\n".join(
+                    f"- **{file.name}**"
+                    for file in st.session_state.files
+                )
+                st.markdown(uploaded_file)
+
+
+        with st.expander("Predefined commands"):
+            commands_description = "\n\n".join(
+                f":green[**/{command}**]: {expansion.split(".")[0]} ..."
+                for command, expansion in st.session_state.config[
+                    "command_map"
+                ].items()
+            )
+            st.markdown(commands_description)
+
+
 def token_validation_page():
     st.title("Step 1: Validate your token")
     access_token = st.text_input(
@@ -201,6 +225,7 @@ if __name__ == "__main__":
     st.session_state.setdefault("token_valid", False)
     st.session_state.setdefault("configured", False)
 
+    sidebar()
     if not st.session_state.token_valid:
         token_validation_page()
     else:
