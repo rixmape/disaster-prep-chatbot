@@ -13,9 +13,18 @@ def sidebar():
         st.title("Local Disaster Preparedness Chatbot")
         st.markdown(st.session_state.config["app_description"])
 
+        if "files" in st.session_state:
+            with st.expander("Uploaded files"):
+                uploaded_file = "\n".join(
+                    f"- **{file.name}**"
+                    for file in st.session_state.files
+                )
+                st.markdown(uploaded_file)
+
+
         with st.expander("Predefined commands"):
-            commands_description = "\n".join(
-                f"- `{command}`: {expansion.split(".")[0]} ..."
+            commands_description = "\n\n".join(
+                f":green[**/{command}**]: {expansion.split(".")[0]} ..."
                 for command, expansion in st.session_state.config[
                     "command_map"
                 ].items()
