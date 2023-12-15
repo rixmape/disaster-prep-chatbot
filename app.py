@@ -3,8 +3,10 @@ This module contains the main Streamlit app for the chatbot.
 """
 
 import time
+from io import BytesIO
 import streamlit as st
 from openai import OpenAI
+import PyPDF2
 import yaml
 
 
@@ -57,7 +59,7 @@ def configuration_page():
     st.session_state.files = st.file_uploader(
         "Upload some files:",
         accept_multiple_files=True,
-        type=["pdf", "txt", "docx", "html", "md", "pptx"],
+        type=["pdf", "txt", "html", "md"],
     )
 
     if st.button("Start chatting!"):
@@ -103,10 +105,17 @@ def initialize_chatbot():
     # TODO: Remove this hack once the document retrieval of the API is fixed
     doc_content = "Please read and understand the following documents: "
     for file in st.session_state.files:
-        file_content = file.getvalue().decode("utf-8")
+        if file.name.endswith(".pdf"):
+            reader = PyPDF2.PdfReader(BytesIO(file.getvalue()))
+            file_content = ""
+            for page in reader.pages:
+                file_content += page.extract_text()
+        else:
+            file_content = file.getvalue().decode("utf-8")
+
         chunks = [
-            file_content[i : i + 32768]
-            for i in range(0, len(file_content), 32768)
+            file_content[i : i + 30000]
+            for i in range(0, len(file_content), 30000)
         ]
         for chunk in chunks:
             doc_content += chunk + "\n\n"
