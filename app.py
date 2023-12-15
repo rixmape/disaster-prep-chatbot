@@ -97,7 +97,7 @@ def initialize_chatbot():
             instructions=instructions,
             name="Disaster Preparedness Expert",
             tools=[{"type": "retrieval"}],
-            model="gpt-3.5-turbo-1106",
+            model=st.secrets.get("openai_model", "gpt-3.5-turbo-1106"),
             # file_ids=file_ids,
         ),
     )
@@ -120,7 +120,7 @@ def initialize_chatbot():
             st.session_state.client.beta.threads.messages.create(
                 thread_id=st.session_state.thread.id,
                 role="user",
-                content="Please understand this document:\n\n" + chunk,
+                content=f"Here's a helpful document:\n\n'''\n{chunk}\n'''",
                 metadata={"hidden": True},
             )
 
