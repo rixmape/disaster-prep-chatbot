@@ -3,8 +3,10 @@ This module contains the main Streamlit app for the chatbot.
 """
 
 import time
+from io import BytesIO
 import streamlit as st
 from openai import OpenAI
+import PyPDF2
 import yaml
 
 
@@ -16,15 +18,13 @@ def sidebar():
         if "files" in st.session_state:
             with st.expander("Uploaded files"):
                 uploaded_file = "\n".join(
-                    f"- **{file.name}**"
-                    for file in st.session_state.files
+                    f"- **{file.name}**" for file in st.session_state.files
                 )
                 st.markdown(uploaded_file)
 
-
         with st.expander("Predefined commands"):
             commands_description = "\n\n".join(
-                f":green[**/{command}**]: {expansion.split(".")[0]} ..."
+                f":green[**/{command}**]: {expansion.split('.')[0]} ..."
                 for command, expansion in st.session_state.config[
                     "command_map"
                 ].items()
@@ -59,7 +59,7 @@ def configuration_page():
     st.session_state.files = st.file_uploader(
         "Upload some files:",
         accept_multiple_files=True,
-        type=["pdf", "txt", "docx", "html", "md", "pptx"],
+        type=["pdf", "txt", "html", "md"],
     )
 
     if st.button("Start chatting!"):
@@ -83,7 +83,7 @@ def initialize_chatbot():
     )
 
     st.write("Uploading files...")
-    file_ids = get_file_ids()
+    # file_ids = get_file_ids()
 
     # TODO: Avoid creating a new assistant every time
     instructions = st.session_state.config["default_instructions"].format(
@@ -97,10 +97,32 @@ def initialize_chatbot():
             instructions=instructions,
             name="Disaster Preparedness Expert",
             tools=[{"type": "retrieval"}],
-            model="gpt-3.5-turbo-1106",
-            file_ids=file_ids,
+            model=st.secrets.get("openai_model", "gpt-3.5-turbo-1106"),
+            # file_ids=file_ids,
         ),
     )
+
+    # TODO: Remove this hack once the document retrieval of the API is fixed
+    for file in st.session_state.files:
+        if file.name.endswith(".pdf"):
+            reader = PyPDF2.PdfReader(BytesIO(file.getvalue()))
+            file_content = "".join(page.extract_text() for page in reader.pages)
+        else:
+            file_content = file.getvalue().decode("utf-8")
+
+        chunk_size = 30000
+        chunks = [
+            file_content[i : i + chunk_size]
+            for i in range(0, len(file_content), chunk_size)
+        ]
+
+        for chunk in chunks:
+            st.session_state.client.beta.threads.messages.create(
+                thread_id=st.session_state.thread.id,
+                role="user",
+                content=f"Here's a helpful document:\n\n'''\n{chunk}\n'''",
+                metadata={"hidden": True},
+            )
 
 
 def get_file_ids():
@@ -157,6 +179,9 @@ def chat_page():
     )
 
     for message in messages:
+        if message.metadata.get("hidden"):
+            continue
+
         text = message.content[0].text
         assistant_message = st.chat_message(message.role)
         assistant_message.markdown(text.value)
