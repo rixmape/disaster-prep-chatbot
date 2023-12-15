@@ -19,7 +19,7 @@ personalities:
 
 command_map:
   explain: |
-    Your task is to provide a detailed and comprehensible explanation of the concept specified in the user's query. Utilize the document database to source accurate and relevant information. Present the explanation in an easily understandable format, simplifying complex aspects where necessary.
+    Provide a detailed and clear explanation of the concept specified in the user's query. Utilize the document database to source accurate and relevant information. Present the explanation in an easily understandable format, simplifying complex aspects where necessary.
 
   howto: |
-    Your task is to provide step-by-step instructions for the disaster preparedness procedure mentioned in the user's query. Access the document database to ensure the instructions are accurate and relevant. Break down the procedure into clear, actionable steps, making it easy for users to follow.
+    Write down the step-by-step procedure for the task mentioned in the user's query. Access the document database to ensure the instructions are accurate and relevant. Break down the procedure into clear, actionable steps, making it easy for users to follow.
