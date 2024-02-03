@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from operator import itemgetter
 
 import streamlit as st
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -21,6 +22,7 @@ os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGCHAIN_PROJECT", "default")
 os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 
 # fmt: on
+
 
 def setup_file_uploader():
     uploaded_files = st.sidebar.file_uploader(
@@ -80,9 +82,7 @@ def prompt_contextualizer(input):
         ]
     )
 
-    return (
-        prompt_template | ChatOpenAI() | StrOutputParser()
-    )
+    return prompt_template | ChatOpenAI() | StrOutputParser()
 
 
 st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="📖")
@@ -114,7 +114,11 @@ prompt_template = ChatPromptTemplate.from_messages(
 )
 
 rag_chain = (
-    RunnablePassthrough.assign(context=prompt_contextualizer | retriever)
+    {
+        "question": itemgetter("question"),
+        "history": itemgetter("history"),
+        "context": prompt_contextualizer | retriever,
+    }
     | prompt_template
     | ChatOpenAI()
 )
@@ -123,13 +127,12 @@ for msg in msgs.messages:
     st.chat_message(msg.type).write(msg.content)
 
 if prompt := st.chat_input():
-    msgs.add_user_message(prompt)
     st.chat_message("human").write(prompt)
-
     response = rag_chain.invoke({"question": prompt, "history": msgs.messages})
-
-    msgs.add_ai_message(response.content)
     st.chat_message("ai").write(response.content)
+
+    msgs.add_user_message(prompt)
+    msgs.add_ai_message(response.content)
 
 with view_messages:
     view_messages.json(st.session_state.langchain_messages)
