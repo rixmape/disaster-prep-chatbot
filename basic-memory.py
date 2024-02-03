@@ -1,9 +1,44 @@
+# fmt: off
+import os
+import tempfile
+
+import streamlit as st
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain_core.runnables import RunnablePassthrough
 
-import streamlit as st
+def configure_retriever(uploaded_files):
+    # Read documents
+    docs = []
+    temp_dir = tempfile.TemporaryDirectory()
+    for file in uploaded_files:
+        temp_filepath = os.path.join(temp_dir.name, file.name)
+        with open(temp_filepath, "wb") as f:
+            f.write(file.getvalue())
+        loader = PyPDFLoader(temp_filepath)
+        docs.extend(loader.load())
+
+    # Split documents
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
+    splits = text_splitter.split_documents(docs)
+
+    # Create embeddings and store in vectordb
+    embeddings = OpenAIEmbeddings()
+    vectordb = Chroma.from_documents(splits, embeddings)
+
+    # Define retriever
+    retriever = vectordb.as_retriever(search_type="mmr", search_kwargs={"k": 4, "fetch_k": 4})
+
+    return retriever
+
+def question_getter(input):
+    return input["question"]
+
 
 st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="📖")
 st.title("📖 StreamlitChatMessageHistory")
@@ -24,22 +59,35 @@ if not openai_api_key:
     st.info("Enter an OpenAI API Key to continue")
     st.stop()
 
-# Set up the LangChain, passing in Message History
+uploaded_files = st.sidebar.file_uploader(
+    label="Upload PDF files", type=["pdf"], accept_multiple_files=True
+)
+if not uploaded_files:
+    st.info("Please upload PDF documents to continue.")
+    st.stop()
 
-prompt = ChatPromptTemplate.from_messages(
+retriever = configure_retriever(uploaded_files)
+
+# Set up the LangChain, passing in Message History
+system_prompt = """You are an assistant for question-answering tasks. \
+Use the following pieces of retrieved context to answer the question. \
+If you don't know the answer, just say that you don't know. \
+Use three sentences maximum and keep the answer concise.\
+
+{context}"""
+
+prompt_template = ChatPromptTemplate.from_messages(
     [
-        ("system", "You are an AI chatbot having a conversation with a human."),
+        ("system", system_prompt),
         MessagesPlaceholder(variable_name="history"),
         ("human", "{question}"),
     ]
 )
 
-chain = prompt | ChatOpenAI(api_key=openai_api_key)
-chain_with_history = RunnableWithMessageHistory(
-    chain,
-    lambda session_id: msgs,
-    input_messages_key="question",
-    history_messages_key="history",
+rag_chain = (
+    RunnablePassthrough.assign(context=question_getter | retriever)
+    | prompt_template
+    | ChatOpenAI(api_key=openai_api_key)
 )
 
 # Render current messages from StreamlitChatMessageHistory
@@ -48,10 +96,12 @@ for msg in msgs.messages:
 
 # If user inputs a new prompt, generate and draw a new response
 if prompt := st.chat_input():
+    msgs.add_user_message(prompt)
     st.chat_message("human").write(prompt)
-    # Note: new messages are saved to history automatically by Langchain during run
-    config = {"configurable": {"session_id": "any"}}
-    response = chain_with_history.invoke({"question": prompt}, config)
+
+    response = rag_chain.invoke({"question": prompt, "history": msgs.messages})
+
+    msgs.add_ai_message(response.content)
     st.chat_message("ai").write(response.content)
 
 # Draw the messages at the end, so newly generated ones show up immediately
