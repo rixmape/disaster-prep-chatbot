@@ -24,7 +24,7 @@ The Local Disaster Preparedness Chatbot is designed to provide accurate, recent,
    Activate the virtual environment:
    - On Windows:
 
-     ```bash
+     ```cmd
      chatbot-venv\Scripts\activate
      ```
 
@@ -44,11 +44,14 @@ The Local Disaster Preparedness Chatbot is designed to provide accurate, recent,
 
 4. **Set up API Keys:**
 
-   Create an `.env` file in your project directory and add your OpenAI API key and the access tokens for authentication:
+   Create an `.streamlit/secrets.toml` file in your project directory and add your OpenAI API key and the access tokens for authentication:
 
    ```plaintext
    OPENAI_API_KEY='YOUR_OPENAI_API_KEY_HERE'
-   ACCESS_TOKENS='YOUR_ACCESS_TOKENS_HERE'
+   ACCESS_TOKENS=[
+       'YOUR_ACCESS_TOKEN_1',
+       'YOUR_ACCESS_TOKEN_2',
+   ]
    ```
 
 5. **Configure `config.yaml`:**
