@@ -40,7 +40,7 @@ def token_validation_page():
         help="Get your access token from the app developer.",
     )
 
-    if access_token and access_token in st.secrets["access_tokens"]:
+    if access_token and access_token in st.secrets["ACCESS_TOKENS"]:
         st.success("You have successfully entered a valid token!")
         st.session_state.token_valid = True
         st.rerun()
@@ -73,7 +73,7 @@ def initialize_chatbot():
     st.write("Initializing OpenAI client...")
     st.session_state.setdefault(
         "client",
-        OpenAI(api_key=st.secrets["openai_api_key"]),
+        OpenAI(api_key=st.secrets["OPENAI_API_KEY"]),
     )
 
     st.write("Creating thread...")
@@ -97,7 +97,7 @@ def initialize_chatbot():
             instructions=instructions,
             name="Disaster Preparedness Expert",
             tools=[{"type": "retrieval"}],
-            model=st.secrets.get("openai_model", "gpt-3.5-turbo-1106"),
+            model=st.secrets.get("OPENAI_MODEL", "gpt-3.5-turbo-1106"),
             # file_ids=file_ids,
         ),
     )
