@@ -1,19 +1,21 @@
 # fmt: off
+
 import os
 import tempfile
 
 import streamlit as st
-from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
+# fmt: on
+
 
 def configure_retriever(uploaded_files):
-    # Read documents
     docs = []
     temp_dir = tempfile.TemporaryDirectory()
     for file in uploaded_files:
@@ -23,18 +25,20 @@ def configure_retriever(uploaded_files):
         loader = PyPDFLoader(temp_filepath)
         docs.extend(loader.load())
 
-    # Split documents
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
-    splits = text_splitter.split_documents(docs)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1500,
+        chunk_overlap=200,
+    )
 
-    # Create embeddings and store in vectordb
+    splits = text_splitter.split_documents(docs)
     embeddings = OpenAIEmbeddings()
     vectordb = Chroma.from_documents(splits, embeddings)
 
-    # Define retriever
-    retriever = vectordb.as_retriever(search_type="mmr", search_kwargs={"k": 4, "fetch_k": 4})
+    return vectordb.as_retriever(
+        search_type="mmr",
+        search_kwargs={"k": 4, "fetch_k": 4},
+    )
 
-    return retriever
 
 def question_getter(input):
     return input["question"]
@@ -90,11 +94,9 @@ rag_chain = (
     | ChatOpenAI(api_key=openai_api_key)
 )
 
-# Render current messages from StreamlitChatMessageHistory
 for msg in msgs.messages:
     st.chat_message(msg.type).write(msg.content)
 
-# If user inputs a new prompt, generate and draw a new response
 if prompt := st.chat_input():
     msgs.add_user_message(prompt)
     st.chat_message("human").write(prompt)
@@ -104,14 +106,5 @@ if prompt := st.chat_input():
     msgs.add_ai_message(response.content)
     st.chat_message("ai").write(response.content)
 
-# Draw the messages at the end, so newly generated ones show up immediately
 with view_messages:
-    """
-    Message History initialized with:
-    ```python
-    msgs = StreamlitChatMessageHistory(key="langchain_messages")
-    ```
-
-    Contents of `st.session_state.langchain_messages`:
-    """
     view_messages.json(st.session_state.langchain_messages)
