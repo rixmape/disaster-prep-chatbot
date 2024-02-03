@@ -8,6 +8,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import Chroma
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -15,7 +16,33 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 # fmt: on
 
 
-def configure_retriever(uploaded_files):
+def setup_openai_api_key():
+    if "OPENAI_API_KEY" in st.secrets:
+        openai_api_key = st.secrets.OPENAI_API_KEY
+    else:
+        openai_api_key = st.sidebar.text_input(
+            "OpenAI API Key", type="password"
+        )
+    if not openai_api_key:
+        st.info("Enter an OpenAI API Key to continue")
+        st.stop()
+    return openai_api_key
+
+
+def setup_file_uploader():
+    uploaded_files = st.sidebar.file_uploader(
+        label="Upload PDF files",
+        type=["pdf"],
+        accept_multiple_files=True,
+    )
+
+    if not uploaded_files:
+        st.info("Please upload PDF documents to continue.")
+        st.stop()
+    return uploaded_files
+
+
+def setup_retriever(uploaded_files):
     docs = []
     temp_dir = tempfile.TemporaryDirectory()
     for file in uploaded_files:
@@ -40,8 +67,25 @@ def configure_retriever(uploaded_files):
     )
 
 
-def question_getter(input):
-    return input["question"]
+def prompt_contextualizer(input):
+    # Do not contextualize the question if there is no history
+    if not input["history"]:
+        return input["question"]
+
+    system_prompt = """Given a chat history and the latest user question \
+    which might reference context in the chat history, formulate a standalone \
+    question which can be understood without the chat history. Do NOT answer \
+    the question, just reformulate it if needed."""
+
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}"),
+        ]
+    )
+
+    return prompt_template | ChatOpenAI(api_key=openai_api_key) | StrOutputParser()
 
 
 st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="📖")
@@ -54,25 +98,10 @@ if len(msgs.messages) == 0:
 
 view_messages = st.expander("View the message contents in session state")
 
-# Get an OpenAI API Key before continuing
-if "OPENAI_API_KEY" in st.secrets:
-    openai_api_key = st.secrets.OPENAI_API_KEY
-else:
-    openai_api_key = st.sidebar.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Enter an OpenAI API Key to continue")
-    st.stop()
+openai_api_key = setup_openai_api_key()
+uploaded_files = setup_file_uploader()
+retriever = setup_retriever(uploaded_files)
 
-uploaded_files = st.sidebar.file_uploader(
-    label="Upload PDF files", type=["pdf"], accept_multiple_files=True
-)
-if not uploaded_files:
-    st.info("Please upload PDF documents to continue.")
-    st.stop()
-
-retriever = configure_retriever(uploaded_files)
-
-# Set up the LangChain, passing in Message History
 system_prompt = """You are an assistant for question-answering tasks. \
 Use the following pieces of retrieved context to answer the question. \
 If you don't know the answer, just say that you don't know. \
@@ -89,7 +118,7 @@ prompt_template = ChatPromptTemplate.from_messages(
 )
 
 rag_chain = (
-    RunnablePassthrough.assign(context=question_getter | retriever)
+    RunnablePassthrough.assign(context=prompt_contextualizer | retriever)
     | prompt_template
     | ChatOpenAI(api_key=openai_api_key)
 )
