@@ -13,21 +13,14 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
+
+os.environ["LANGCHAIN_TRACING_V2"] = st.secrets.get("LANGCHAIN_TRACING_V2", "false")
+os.environ["LANGCHAIN_ENDPOINT"] = st.secrets.get("LANGCHAIN_ENDPOINT", "https://api.langchain.com")
+os.environ["LANGCHAIN_API_KEY"] = st.secrets.get("LANGCHAIN_API_KEY", "")
+os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGCHAIN_PROJECT", "default")
+os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
+
 # fmt: on
-
-
-def setup_openai_api_key():
-    if "OPENAI_API_KEY" in st.secrets:
-        openai_api_key = st.secrets.OPENAI_API_KEY
-    else:
-        openai_api_key = st.sidebar.text_input(
-            "OpenAI API Key", type="password"
-        )
-    if not openai_api_key:
-        st.info("Enter an OpenAI API Key to continue")
-        st.stop()
-    return openai_api_key
-
 
 def setup_file_uploader():
     uploaded_files = st.sidebar.file_uploader(
@@ -39,12 +32,14 @@ def setup_file_uploader():
     if not uploaded_files:
         st.info("Please upload PDF documents to continue.")
         st.stop()
+
     return uploaded_files
 
 
 def setup_retriever(uploaded_files):
     docs = []
     temp_dir = tempfile.TemporaryDirectory()
+
     for file in uploaded_files:
         temp_filepath = os.path.join(temp_dir.name, file.name)
         with open(temp_filepath, "wb") as f:
@@ -85,7 +80,9 @@ def prompt_contextualizer(input):
         ]
     )
 
-    return prompt_template | ChatOpenAI(api_key=openai_api_key) | StrOutputParser()
+    return (
+        prompt_template | ChatOpenAI() | StrOutputParser()
+    )
 
 
 st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="📖")
@@ -98,7 +95,6 @@ if len(msgs.messages) == 0:
 
 view_messages = st.expander("View the message contents in session state")
 
-openai_api_key = setup_openai_api_key()
 uploaded_files = setup_file_uploader()
 retriever = setup_retriever(uploaded_files)
 
@@ -120,7 +116,7 @@ prompt_template = ChatPromptTemplate.from_messages(
 rag_chain = (
     RunnablePassthrough.assign(context=prompt_contextualizer | retriever)
     | prompt_template
-    | ChatOpenAI(api_key=openai_api_key)
+    | ChatOpenAI()
 )
 
 for msg in msgs.messages:
