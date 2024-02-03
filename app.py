@@ -3,11 +3,10 @@ This module contains the main Streamlit app for the chatbot.
 """
 
 import time
-from io import BytesIO
+
 import streamlit as st
-from openai import OpenAI
-import PyPDF2
 import yaml
+from openai import OpenAI
 
 
 def sidebar():
@@ -83,7 +82,7 @@ def initialize_chatbot():
     )
 
     st.write("Uploading files...")
-    # file_ids = get_file_ids()
+    file_ids = get_file_ids()
 
     # TODO: Avoid creating a new assistant every time
     instructions = st.session_state.config["default_instructions"].format(
@@ -98,31 +97,9 @@ def initialize_chatbot():
             name="Disaster Preparedness Expert",
             tools=[{"type": "retrieval"}],
             model=st.secrets.get("OPENAI_MODEL", "gpt-3.5-turbo-1106"),
-            # file_ids=file_ids,
+            file_ids=file_ids,
         ),
     )
-
-    # TODO: Remove this hack once the document retrieval of the API is fixed
-    for file in st.session_state.files:
-        if file.name.endswith(".pdf"):
-            reader = PyPDF2.PdfReader(BytesIO(file.getvalue()))
-            file_content = "".join(page.extract_text() for page in reader.pages)
-        else:
-            file_content = file.getvalue().decode("utf-8")
-
-        chunk_size = 30000
-        chunks = [
-            file_content[i : i + chunk_size]
-            for i in range(0, len(file_content), chunk_size)
-        ]
-
-        for chunk in chunks:
-            st.session_state.client.beta.threads.messages.create(
-                thread_id=st.session_state.thread.id,
-                role="user",
-                content=f"Here's a helpful document:\n\n'''\n{chunk}\n'''",
-                metadata={"hidden": True},
-            )
 
 
 def get_file_ids():
