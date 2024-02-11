@@ -2,6 +2,7 @@
 This module contains the main Streamlit app for the chatbot.
 """
 
+import os
 import time
 
 import streamlit as st
@@ -14,12 +15,14 @@ def sidebar():
         st.title("Local Disaster Preparedness Chatbot")
         st.markdown(st.session_state.config["app_description"])
 
-        if "files" in st.session_state:
+        if "filenames" in st.session_state:
             with st.expander("Uploaded files"):
-                uploaded_file = "\n".join(
-                    f"- **{file.name}**" for file in st.session_state.files
+                st.markdown(
+                    "\n".join(
+                        f"- **{filename}**"
+                        for filename in st.session_state.filenames
+                    )
                 )
-                st.markdown(uploaded_file)
 
         with st.expander("Predefined commands"):
             commands_description = "\n\n".join(
@@ -39,15 +42,11 @@ def configuration_page():
         options=st.session_state.config["personalities"].keys(),
     )
 
-    st.session_state.files = st.file_uploader(
-        "Upload some files:",
-        accept_multiple_files=True,
-        type=["pdf", "txt", "html", "md"],
-    )
+    st.session_state.filenames = os.listdir("documents")
 
     if st.button("Start chatting!"):
-        if not st.session_state.files:
-            st.error("Please upload some files to continue.")
+        if not st.session_state.filenames:
+            st.error("No files uploaded.")
         else:
             st.session_state.configured = True
 
@@ -93,18 +92,17 @@ def get_file_ids():
     }
 
     file_ids = []
-
-    for file in st.session_state.files:
+    for filename in st.session_state.filenames:
         # TODO: Improve file deduplication by checking file contents
-        if file.name in openai_files:
-            file_id = openai_files[file.name]
+        if filename in openai_files:
+            file_id = openai_files[filename]
             file_ids.append(file_id)
         else:
-            file = st.session_state.client.files.create(
-                file=file,
+            assistant_file = st.session_state.client.files.create(
+                file=filename,
                 purpose="assistants",
             )
-            file_ids.append(file.id)
+            file_ids.append(assistant_file.id)
 
     return file_ids
 
