@@ -2,12 +2,29 @@
 This module contains the main Streamlit app for the chatbot.
 """
 
+import json
 import os
 import time
 
 import streamlit as st
 import yaml
 from openai import OpenAI
+
+
+def get_chat_history_json():
+    messages = st.session_state.client.beta.threads.messages.list(
+        thread_id=st.session_state.thread.id,
+        order="asc",
+    )
+    return json.dumps(
+        [
+            {
+                "role": message.role,
+                "value": message.content[0].text.value,
+            }
+            for message in messages
+        ]
+    )
 
 
 def setup_sidebar():
@@ -32,6 +49,16 @@ def setup_sidebar():
                 ].items()
             )
             st.markdown(commands_description)
+
+        if "client" in st.session_state:
+            st.download_button(
+                label="Download Conversation",
+                data=get_chat_history_json(),
+                file_name=f"chat-history-{time.time()}.json",
+                mime="application/json",
+                use_container_width=True,
+                type="primary",
+            )
 
 
 def setup_config_page():
