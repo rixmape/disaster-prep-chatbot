@@ -31,24 +31,8 @@ def sidebar():
             st.markdown(commands_description)
 
 
-def token_validation_page():
-    st.title("Step 1: Validate your token")
-    access_token = st.text_input(
-        "Enter your access token to continue:",
-        type="password",
-        help="Get your access token from the app developer.",
-    )
-
-    if access_token and access_token in st.secrets["ACCESS_TOKENS"]:
-        st.success("You have successfully entered a valid token!")
-        st.session_state.token_valid = True
-        st.rerun()
-    elif access_token:
-        st.error("Please enter a valid token to access the main page.")
-
-
 def configuration_page():
-    st.title("Step 2: Configure your chatbot")
+    st.title("Configure your chatbot")
 
     st.session_state.personality = st.selectbox(
         "Select a personality:",
@@ -135,7 +119,7 @@ def parse_slash_command(prompt):
 
 
 def chat_page():
-    st.title("Step 3: Let's Chat!")
+    st.title("Let's Chat!")
 
     if "client" not in st.session_state:
         with (
@@ -224,14 +208,10 @@ if __name__ == "__main__":
         with open("config.yaml", "r", encoding="utf-8") as file:
             st.session_state.config = yaml.safe_load(file)
 
-    st.session_state.setdefault("token_valid", False)
     st.session_state.setdefault("configured", False)
 
     sidebar()
-    if not st.session_state.token_valid:
-        token_validation_page()
+    if not st.session_state.configured:
+        configuration_page()
     else:
-        if not st.session_state.configured:
-            configuration_page()
-        else:
-            chat_page()
+        chat_page()
