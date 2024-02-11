@@ -10,7 +10,7 @@ import yaml
 from openai import OpenAI
 
 
-def sidebar():
+def setup_sidebar():
     with st.sidebar:
         st.title("Local Disaster Preparedness Chatbot")
         st.markdown(st.session_state.config["app_description"])
@@ -34,21 +34,19 @@ def sidebar():
             st.markdown(commands_description)
 
 
-def configuration_page():
+def setup_config_page():
     st.title("Configure your chatbot")
-
+    st.session_state.filenames = os.listdir("documents")
     st.session_state.personality = st.selectbox(
         "Select a personality:",
         options=st.session_state.config["personalities"].keys(),
     )
 
-    st.session_state.filenames = os.listdir("documents")
-
     if st.button("Start chatting!"):
-        if not st.session_state.filenames:
-            st.error("No files uploaded.")
-        else:
+        if st.session_state.filenames:
             st.session_state.configured = True
+        else:
+            st.error("No files uploaded.")
 
 
 def initialize_chatbot():
@@ -116,7 +114,7 @@ def parse_slash_command(prompt):
         return prompt
 
 
-def chat_page():
+def setup_chat_page():
     st.title("Let's Chat!")
 
     if "client" not in st.session_state:
@@ -152,7 +150,7 @@ def chat_page():
         ]
 
         if not citations:
-            continue  # Don't display the citations section if there are none
+            continue
 
         citation_container = assistant_message.expander(
             f"File Citations ({len(citations)})",
@@ -202,14 +200,13 @@ def chat_page():
 
 
 if __name__ == "__main__":
+    st.session_state.setdefault("configured", False)
     if "config" not in st.session_state:
         with open("config.yaml", "r", encoding="utf-8") as file:
             st.session_state.config = yaml.safe_load(file)
 
-    st.session_state.setdefault("configured", False)
-
-    sidebar()
-    if not st.session_state.configured:
-        configuration_page()
+    setup_sidebar()
+    if st.session_state.configured:
+        setup_chat_page()
     else:
-        chat_page()
+        setup_config_page()
