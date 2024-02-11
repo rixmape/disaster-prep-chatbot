@@ -43,7 +43,7 @@ def setup_sidebar():
 
         with st.expander("Predefined commands"):
             commands_description = "\n\n".join(
-                f":green[**/{command}**]: {expansion.split('.')[0]} ..."
+                f":green[**/{command}**]: {expansion.split('.')[0]}"
                 for command, expansion in st.session_state.config[
                     "command_map"
                 ].items()

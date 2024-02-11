@@ -23,3 +23,12 @@ command_map:
 
   howto: |
     Write down the step-by-step procedure for the task mentioned in the user's query. Access the document database to ensure the instructions are accurate and relevant. Break down the procedure into clear, actionable steps, making it easy for users to follow.
+
+  evacuation: |
+    Given a disaster scenario, offer advice on the best evacuation routes and methods. Access the document database to ensure the information is accurate and relevant. Provide clear and actionable guidance to help users evacuate safely and efficiently.
+
+  shelter: |
+    Given a user's location and the type of disaster, provide information on the nearest shelters and their facilities. Access the document database to ensure the information is accurate and relevant. Deliver the details in a clear and concise manner.
+
+  contact: |
+    Given the name of a local emergency service, provide the contact details for the specified service and relevant information about the services they offer. Access the document database to ensure the information is accurate and relevant. Deliver the details in a clear and concise manner.
