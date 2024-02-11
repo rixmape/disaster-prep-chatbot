@@ -10,6 +10,19 @@ import yaml
 from openai import OpenAI
 
 
+def get_chat_history_str():
+    messages = st.session_state.client.beta.threads.messages.list(
+        thread_id=st.session_state.thread.id,
+        order="asc",
+    )
+    return "\n\n".join(
+        [
+            f"{message.role.capitalize()}: {message.content[0].text.value}"
+            for message in messages
+        ]
+    )
+
+
 def setup_sidebar():
     with st.sidebar:
         st.title("Local Disaster Preparedness Chatbot")
@@ -32,6 +45,14 @@ def setup_sidebar():
                 ].items()
             )
             st.markdown(commands_description)
+
+        if "client" in st.session_state:
+            st.download_button(
+                label="Download Conversation",
+                data=get_chat_history_str(),
+                use_container_width=True,
+                type="primary",
+            )
 
 
 def setup_config_page():
