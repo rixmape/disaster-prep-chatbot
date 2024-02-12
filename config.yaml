@@ -17,18 +17,23 @@ personalities:
   Original and imaginative: |
     Your responses should not only be accurate but also exhibit a flair for originality. Envision your role as not just an informant but as a storyteller who brings the world of disaster preparedness to life with imagination and innovation.
 
-command_map:
-  explain: |
-    Provide a detailed and clear explanation of the concept specified in the user's query. Utilize the document database to source accurate and relevant information. Present the explanation in an easily understandable format, simplifying complex aspects where necessary.
+commands:
+  explain:
+    description: |
+      Given a concept, explain its meaning and relevance to disaster preparedness.
+    arg: disaster supply kit
 
-  howto: |
-    Write down the step-by-step procedure for the task mentioned in the user's query. Access the document database to ensure the instructions are accurate and relevant. Break down the procedure into clear, actionable steps, making it easy for users to follow.
+  howto:
+    description: |
+      Given a task, provide a step-by-step guide on how to complete it.
+    arg: create an emergency plan
 
-  evacuation: |
-    Given a disaster scenario, offer advice on the best evacuation routes and methods. Access the document database to ensure the information is accurate and relevant. Provide clear and actionable guidance to help users evacuate safely and efficiently.
+  evacuation:
+    description: |
+      Given a disaster scenario, offer advice on evacuation procedures and shelters.
+    arg: volcanic erruption
 
-  shelter: |
-    Given a user's location and the type of disaster, provide information on the nearest shelters and their facilities. Access the document database to ensure the information is accurate and relevant. Deliver the details in a clear and concise manner.
-
-  contact: |
-    Given the name of a local emergency service, provide the contact details for the specified service and relevant information about the services they offer. Access the document database to ensure the information is accurate and relevant. Deliver the details in a clear and concise manner.
+  contact:
+    description: |
+      Given an emergency service, provide the contact details and services offered.
+    arg: search and rescue unit
