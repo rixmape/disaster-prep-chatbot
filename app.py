@@ -42,13 +42,13 @@ def setup_sidebar():
                 )
 
         with st.expander("Predefined commands"):
-            commands_description = "\n\n".join(
-                f":green[**/{command}**]: {expansion.split('.')[0]} ..."
-                for command, expansion in st.session_state.config[
-                    "command_map"
-                ].items()
-            )
-            st.markdown(commands_description)
+            commands = st.session_state.config["commands"]
+            for name, info in commands.items():
+                st.markdown(
+                    f":green[**{name}**] : {info['description']}\n\n"
+                    "Sample usage:\n\n"
+                    f"\t/{name} {info['arg']}\n\n"
+                )
 
         if "client" in st.session_state:
             st.download_button(
@@ -134,9 +134,14 @@ def get_file_ids():
 
 def parse_slash_command(prompt):
     command, query = prompt.lstrip("/").split(" ", 1)
-    instruction = st.session_state.config["command_map"].get(command)
-    if instruction:
-        return f"{instruction}\n\nQuery: {query}"
+    info = st.session_state.config["commands"].get(command)
+    if info:
+        return (
+            f"{info['description']}"
+            " Access the uploaded files to search for relevant information."
+            " Deliver the details in a clear and concise language.\n\n"
+            f" Input: {query}"
+        )
     else:
         return prompt
 
