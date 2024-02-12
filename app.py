@@ -134,9 +134,14 @@ def get_file_ids():
 
 def parse_slash_command(prompt):
     command, query = prompt.lstrip("/").split(" ", 1)
-    instruction = st.session_state.config["command_map"].get(command)
-    if instruction:
-        return f"{instruction}\n\nQuery: {query}"
+    info = st.session_state.config["commands"].get(command)
+    if info:
+        return (
+            f"{info['description']}"
+            " Access the uploaded files to search for relevant information."
+            " Deliver the details in a clear and concise language.\n\n"
+            f" Input: {query}"
+        )
     else:
         return prompt
 
