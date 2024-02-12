@@ -2,6 +2,8 @@
 This module contains the main Streamlit app for the chatbot.
 """
 
+import json
+import os
 import time
 
 import streamlit as st
@@ -9,63 +11,69 @@ import yaml
 from openai import OpenAI
 
 
-def sidebar():
+def get_chat_history_json():
+    messages = st.session_state.client.beta.threads.messages.list(
+        thread_id=st.session_state.thread.id,
+        order="asc",
+    )
+    return json.dumps(
+        [
+            {
+                "role": message.role,
+                "value": message.content[0].text.value,
+            }
+            for message in messages
+        ]
+    )
+
+
+def setup_sidebar():
     with st.sidebar:
         st.title("Local Disaster Preparedness Chatbot")
         st.markdown(st.session_state.config["app_description"])
 
-        if "files" in st.session_state:
+        if "filenames" in st.session_state:
             with st.expander("Uploaded files"):
-                uploaded_file = "\n".join(
-                    f"- **{file.name}**" for file in st.session_state.files
+                st.markdown(
+                    "\n".join(
+                        f"- **{filename}**"
+                        for filename in st.session_state.filenames
+                    )
                 )
-                st.markdown(uploaded_file)
 
         with st.expander("Predefined commands"):
-            commands_description = "\n\n".join(
-                f":green[**/{command}**]: {expansion.split('.')[0]} ..."
-                for command, expansion in st.session_state.config[
-                    "command_map"
-                ].items()
+            commands = st.session_state.config["commands"]
+            for name, info in commands.items():
+                st.markdown(
+                    f":green[**{name}**] : {info['description']}\n\n"
+                    "Sample usage:\n\n"
+                    f"\t/{name} {info['arg']}\n\n"
+                )
+
+        if "client" in st.session_state:
+            st.download_button(
+                label="Download Conversation",
+                data=get_chat_history_json(),
+                file_name=f"chat-history-{time.time()}.json",
+                mime="application/json",
+                use_container_width=True,
+                type="primary",
             )
-            st.markdown(commands_description)
 
 
-def token_validation_page():
-    st.title("Step 1: Validate your token")
-    access_token = st.text_input(
-        "Enter your access token to continue:",
-        type="password",
-        help="Get your access token from the app developer.",
-    )
-
-    if access_token and access_token in st.secrets["ACCESS_TOKENS"]:
-        st.success("You have successfully entered a valid token!")
-        st.session_state.token_valid = True
-        st.rerun()
-    elif access_token:
-        st.error("Please enter a valid token to access the main page.")
-
-
-def configuration_page():
-    st.title("Step 2: Configure your chatbot")
-
+def setup_config_page():
+    st.title("Configure your chatbot")
+    st.session_state.filenames = os.listdir("documents")
     st.session_state.personality = st.selectbox(
         "Select a personality:",
         options=st.session_state.config["personalities"].keys(),
     )
 
-    st.session_state.files = st.file_uploader(
-        "Upload some files:",
-        accept_multiple_files=True,
-        type=["pdf", "txt", "html", "md"],
-    )
-
     if st.button("Start chatting!"):
-        if not st.session_state.files:
-            st.error("Please upload some files to continue.")
-        else:
+        if st.session_state.filenames:
             st.session_state.configured = True
+        else:
+            st.error("No files uploaded.")
 
 
 def initialize_chatbot():
@@ -109,33 +117,37 @@ def get_file_ids():
     }
 
     file_ids = []
-
-    for file in st.session_state.files:
+    for filename in st.session_state.filenames:
         # TODO: Improve file deduplication by checking file contents
-        if file.name in openai_files:
-            file_id = openai_files[file.name]
+        if filename in openai_files:
+            file_id = openai_files[filename]
             file_ids.append(file_id)
         else:
-            file = st.session_state.client.files.create(
-                file=file,
+            assistant_file = st.session_state.client.files.create(
+                file=filename,
                 purpose="assistants",
             )
-            file_ids.append(file.id)
+            file_ids.append(assistant_file.id)
 
     return file_ids
 
 
 def parse_slash_command(prompt):
     command, query = prompt.lstrip("/").split(" ", 1)
-    instruction = st.session_state.config["command_map"].get(command)
-    if instruction:
-        return f"{instruction}\n\nQuery: {query}"
+    info = st.session_state.config["commands"].get(command)
+    if info:
+        return (
+            f"{info['description']}"
+            " Access the uploaded files to search for relevant information."
+            " Deliver the details in a clear and concise language.\n\n"
+            f" Input: {query}"
+        )
     else:
         return prompt
 
 
-def chat_page():
-    st.title("Step 3: Let's Chat!")
+def setup_chat_page():
+    st.title("Let's Chat!")
 
     if "client" not in st.session_state:
         with (
@@ -170,7 +182,7 @@ def chat_page():
         ]
 
         if not citations:
-            continue  # Don't display the citations section if there are none
+            continue
 
         citation_container = assistant_message.expander(
             f"File Citations ({len(citations)})",
@@ -220,18 +232,13 @@ def chat_page():
 
 
 if __name__ == "__main__":
+    st.session_state.setdefault("configured", False)
     if "config" not in st.session_state:
         with open("config.yaml", "r", encoding="utf-8") as file:
             st.session_state.config = yaml.safe_load(file)
 
-    st.session_state.setdefault("token_valid", False)
-    st.session_state.setdefault("configured", False)
-
-    sidebar()
-    if not st.session_state.token_valid:
-        token_validation_page()
+    setup_sidebar()
+    if st.session_state.configured:
+        setup_chat_page()
     else:
-        if not st.session_state.configured:
-            configuration_page()
-        else:
-            chat_page()
+        setup_config_page()

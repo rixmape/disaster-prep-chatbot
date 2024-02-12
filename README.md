@@ -9,7 +9,6 @@ The Local Disaster Preparedness Chatbot is designed to provide accurate, recent,
 - **Personalized Information:** Offers information tailored to the specific queries of users, such as nearest shelter locations, emergency procedures, and real-time alerts.
 - **File Uploads:** Accepts and processes textual and PDF documents related to disaster preparedness uploaded by the system administrator or community representatives.
 - **Slash Commands:** Incorporates predefined commands for quick access to common queries and instructions.
-- **Token Validation:** Secures access to the chatbot through a token validation process.
 
 ## Installation
 
@@ -44,14 +43,10 @@ The Local Disaster Preparedness Chatbot is designed to provide accurate, recent,
 
 4. **Set up API Keys:**
 
-   Create an `.streamlit/secrets.toml` file in your project directory and add your OpenAI API key and the access tokens for authentication:
+   Create an `.streamlit/secrets.toml` file in your project directory and add your secret keys:
 
    ```plaintext
    OPENAI_API_KEY='YOUR_OPENAI_API_KEY_HERE'
-   ACCESS_TOKENS=[
-       'YOUR_ACCESS_TOKEN_1',
-       'YOUR_ACCESS_TOKEN_2',
-   ]
    ```
 
 5. **Configure `config.yaml`:**
@@ -68,12 +63,6 @@ The Local Disaster Preparedness Chatbot is designed to provide accurate, recent,
    ```
 
 3. Access the chatbot interface via the URL provided by Streamlit, typically `http://localhost:8501`.
-
-## Using the Chatbot
-
-- **For Users:** Once access is granted through token validation, users can upload files related to disaster preparedness and start chatting with the chatbot for information specific to their queries.
-
-- **For Administrators:** Administrators should validate their tokens, configure the chatbot personality, and upload the relevant local preparedness documents before users can interact with the system.
 
 ## Contributing
 
