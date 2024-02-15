@@ -7,11 +7,10 @@ from operator import itemgetter
 import streamlit as st
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 
@@ -27,7 +26,7 @@ os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 def setup_file_uploader():
     uploaded_files = st.sidebar.file_uploader(
         label="Upload PDF files",
-        type=["pdf"],
+        type=["md", "txt"],
         accept_multiple_files=True,
     )
 
@@ -46,7 +45,7 @@ def setup_retriever(uploaded_files):
         temp_filepath = os.path.join(temp_dir.name, file.name)
         with open(temp_filepath, "wb") as f:
             f.write(file.getvalue())
-        loader = PyPDFLoader(temp_filepath)
+        loader = TextLoader(temp_filepath)
         docs.extend(loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -85,11 +84,11 @@ def prompt_contextualizer(input):
     return prompt_template | ChatOpenAI() | StrOutputParser()
 
 
-st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="📖")
-st.title("📖 StreamlitChatMessageHistory")
+st.set_page_config(page_title="LangChain Q&A with RAG", page_icon="📖")
+st.title("📖 LangChain Q&A with RAG")
 
-# Set up memory
-msgs = StreamlitChatMessageHistory(key="langchain_messages")
+# Set up the chat history
+msgs = StreamlitChatMessageHistory()
 if len(msgs.messages) == 0:
     msgs.add_ai_message("How can I help you?")
 
