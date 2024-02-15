@@ -1,19 +1,17 @@
 # fmt: off
 
 import os
-import tempfile
 from operator import itemgetter
 
 import streamlit as st
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-
 
 os.environ["LANGCHAIN_TRACING_V2"] = st.secrets.get("LANGCHAIN_TRACING_V2", "false")
 os.environ["LANGCHAIN_ENDPOINT"] = st.secrets.get("LANGCHAIN_ENDPOINT", "https://api.langchain.com")
@@ -24,29 +22,11 @@ os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 # fmt: on
 
 
-def setup_file_uploader():
-    uploaded_files = st.sidebar.file_uploader(
-        label="Upload PDF files",
-        type=["pdf"],
-        accept_multiple_files=True,
-    )
-
-    if not uploaded_files:
-        st.info("Please upload PDF documents to continue.")
-        st.stop()
-
-    return uploaded_files
-
-
-def setup_retriever(uploaded_files):
+def setup_retriever(path="documents"):
     docs = []
-    temp_dir = tempfile.TemporaryDirectory()
 
-    for file in uploaded_files:
-        temp_filepath = os.path.join(temp_dir.name, file.name)
-        with open(temp_filepath, "wb") as f:
-            f.write(file.getvalue())
-        loader = PyPDFLoader(temp_filepath)
+    for file in os.listdir(path):
+        loader = TextLoader(f"{path}/{file}")
         docs.extend(loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -85,18 +65,21 @@ def prompt_contextualizer(input):
     return prompt_template | ChatOpenAI() | StrOutputParser()
 
 
-st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="📖")
-st.title("📖 StreamlitChatMessageHistory")
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
 
-# Set up memory
-msgs = StreamlitChatMessageHistory(key="langchain_messages")
+
+st.set_page_config(page_title="LangChain Q&A with RAG", page_icon="📖")
+st.title("📖 LangChain Q&A with RAG")
+
+# Set up the chat history
+msgs = StreamlitChatMessageHistory()
 if len(msgs.messages) == 0:
     msgs.add_ai_message("How can I help you?")
 
 view_messages = st.expander("View the message contents in session state")
 
-uploaded_files = setup_file_uploader()
-retriever = setup_retriever(uploaded_files)
+retriever = setup_retriever()
 
 system_prompt = """You are an assistant for question-answering tasks. \
 Use the following pieces of retrieved context to answer the question. \
@@ -113,26 +96,45 @@ prompt_template = ChatPromptTemplate.from_messages(
     ]
 )
 
-rag_chain = (
+rag_chain_from_docs = (
+    RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
+    | prompt_template
+    | ChatOpenAI()
+    | StrOutputParser()
+)
+
+rag_chain_with_source = RunnableParallel(
     {
         "question": itemgetter("question"),
         "history": itemgetter("history"),
         "context": prompt_contextualizer | retriever,
     }
-    | prompt_template
-    | ChatOpenAI()
-)
+).assign(answer=rag_chain_from_docs)
 
 for msg in msgs.messages:
     st.chat_message(msg.type).write(msg.content)
 
 if prompt := st.chat_input():
     st.chat_message("human").write(prompt)
-    response = rag_chain.invoke({"question": prompt, "history": msgs.messages})
-    st.chat_message("ai").write(response.content)
+    response = rag_chain_with_source.invoke(
+        {
+            "question": prompt,
+            "history": msgs.messages,
+        }
+    )
+
+    with st.chat_message("ai"):
+        st.write(response.get("answer"))
+
+        citation_container = st.expander(f"File Citations:", expanded=False)
+        for citation in response.get("context"):
+            source = citation.metadata.get("source")
+            content = citation.page_content.replace("#", "")
+            content = "\n".join([f"> {line}" for line in content.split("\n")])
+            citation_container.markdown(f"**{source}**\n{content}")
 
     msgs.add_user_message(prompt)
-    msgs.add_ai_message(response.content)
+    msgs.add_ai_message(response.get("answer"))
 
 with view_messages:
     view_messages.json(st.session_state.langchain_messages)
