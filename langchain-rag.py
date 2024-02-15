@@ -139,24 +139,18 @@ if prompt := st.chat_input():
     response = rag_chain_with_source.invoke(
         {"question": prompt, "history": msgs.messages}
     )
-    print(response)
 
     with st.chat_message("ai"):
         st.write(response.get("answer"))
 
-        citations = response.get("context")
-        citation_container = st.expander(
-            f"File Citations ({len(citations)})",
-            expanded=False,
-        )
-
-        for index, citation in enumerate(citations):
-            label = f"**{index+1}. {citation.metadata.get("source")}:**"
-            quote = citation.page_content.replace("#", "")
-            quote = "\n".join(
-                [f"> {line}" for line in quote.split("\n")]
+        citation_container = st.expander(f"File Citations:", expanded=False)
+        for citation in response.get("context"):
+            source = f"**{citation.metadata.get("source")}:**"
+            content = citation.page_content.replace("#", "")
+            content = "\n".join(
+                [f"> {line}" for line in content.split("\n")]
             )
-            citation_container.markdown(f"{label}\n{quote}")
+            citation_container.markdown(f"{source}\n{content}")
 
     msgs.add_user_message(prompt)
     msgs.add_ai_message(response.get("answer"))
