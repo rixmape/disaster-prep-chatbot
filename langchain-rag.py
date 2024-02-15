@@ -11,8 +11,8 @@ from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-
 
 os.environ["LANGCHAIN_TRACING_V2"] = st.secrets.get("LANGCHAIN_TRACING_V2", "false")
 os.environ["LANGCHAIN_ENDPOINT"] = st.secrets.get("LANGCHAIN_ENDPOINT", "https://api.langchain.com")
@@ -84,6 +84,10 @@ def prompt_contextualizer(input):
     return prompt_template | ChatOpenAI() | StrOutputParser()
 
 
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
+
+
 st.set_page_config(page_title="LangChain Q&A with RAG", page_icon="📖")
 st.title("📖 LangChain Q&A with RAG")
 
@@ -112,26 +116,50 @@ prompt_template = ChatPromptTemplate.from_messages(
     ]
 )
 
-rag_chain = (
+rag_chain_from_docs = (
+    RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
+    | prompt_template
+    | ChatOpenAI()
+    | StrOutputParser()
+)
+
+rag_chain_with_source = RunnableParallel(
     {
         "question": itemgetter("question"),
         "history": itemgetter("history"),
         "context": prompt_contextualizer | retriever,
     }
-    | prompt_template
-    | ChatOpenAI()
-)
+).assign(answer=rag_chain_from_docs)
 
 for msg in msgs.messages:
     st.chat_message(msg.type).write(msg.content)
 
 if prompt := st.chat_input():
     st.chat_message("human").write(prompt)
-    response = rag_chain.invoke({"question": prompt, "history": msgs.messages})
-    st.chat_message("ai").write(response.content)
+    response = rag_chain_with_source.invoke(
+        {"question": prompt, "history": msgs.messages}
+    )
+    print(response)
+
+    with st.chat_message("ai"):
+        st.write(response.get("answer"))
+
+        citations = response.get("context")
+        citation_container = st.expander(
+            f"File Citations ({len(citations)})",
+            expanded=False,
+        )
+
+        for index, citation in enumerate(citations):
+            label = f"**{index+1}. {citation.metadata.get("source")}:**"
+            quote = citation.page_content.replace("#", "")
+            quote = "\n".join(
+                [f"> {line}" for line in quote.split("\n")]
+            )
+            citation_container.markdown(f"{label}\n{quote}")
 
     msgs.add_user_message(prompt)
-    msgs.add_ai_message(response.content)
+    msgs.add_ai_message(response.get("answer"))
 
 with view_messages:
     view_messages.json(st.session_state.langchain_messages)
