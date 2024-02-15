@@ -1,7 +1,6 @@
 # fmt: off
 
 import os
-import tempfile
 from operator import itemgetter
 
 import streamlit as st
@@ -23,29 +22,11 @@ os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 # fmt: on
 
 
-def setup_file_uploader():
-    uploaded_files = st.sidebar.file_uploader(
-        label="Upload PDF files",
-        type=["md", "txt"],
-        accept_multiple_files=True,
-    )
-
-    if not uploaded_files:
-        st.info("Please upload PDF documents to continue.")
-        st.stop()
-
-    return uploaded_files
-
-
-def setup_retriever(uploaded_files):
+def setup_retriever(path="documents"):
     docs = []
-    temp_dir = tempfile.TemporaryDirectory()
 
-    for file in uploaded_files:
-        temp_filepath = os.path.join(temp_dir.name, file.name)
-        with open(temp_filepath, "wb") as f:
-            f.write(file.getvalue())
-        loader = TextLoader(temp_filepath)
+    for file in os.listdir(path):
+        loader = TextLoader(f"{path}/{file}")
         docs.extend(loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -98,8 +79,7 @@ if len(msgs.messages) == 0:
 
 view_messages = st.expander("View the message contents in session state")
 
-uploaded_files = setup_file_uploader()
-retriever = setup_retriever(uploaded_files)
+retriever = setup_retriever()
 
 system_prompt = """You are an assistant for question-answering tasks. \
 Use the following pieces of retrieved context to answer the question. \
@@ -137,7 +117,10 @@ for msg in msgs.messages:
 if prompt := st.chat_input():
     st.chat_message("human").write(prompt)
     response = rag_chain_with_source.invoke(
-        {"question": prompt, "history": msgs.messages}
+        {
+            "question": prompt,
+            "history": msgs.messages,
+        }
     )
 
     with st.chat_message("ai"):
@@ -145,12 +128,10 @@ if prompt := st.chat_input():
 
         citation_container = st.expander(f"File Citations:", expanded=False)
         for citation in response.get("context"):
-            source = f"**{citation.metadata.get("source")}:**"
+            source = citation.metadata.get("source")
             content = citation.page_content.replace("#", "")
-            content = "\n".join(
-                [f"> {line}" for line in content.split("\n")]
-            )
-            citation_container.markdown(f"{source}\n{content}")
+            content = "\n".join([f"> {line}" for line in content.split("\n")])
+            citation_container.markdown(f"**{source}**\n{content}")
 
     msgs.add_user_message(prompt)
     msgs.add_ai_message(response.get("answer"))
