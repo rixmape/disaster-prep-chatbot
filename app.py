@@ -6,8 +6,10 @@ import json
 import os
 import time
 
+import firebase_admin
 import streamlit as st
 import yaml
+from firebase_admin import credentials, firestore
 from openai import OpenAI
 
 
@@ -50,6 +52,9 @@ def setup_sidebar():
                     f"\t/{name} {info['arg']}\n\n"
                 )
 
+        with st.expander("Feedback"):
+            setup_feedback_form()
+
         if "client" in st.session_state:
             st.download_button(
                 label="Download Conversation",
@@ -59,6 +64,29 @@ def setup_sidebar():
                 use_container_width=True,
                 type="primary",
             )
+
+
+def setup_feedback_form():
+    st.write(st.session_state.config.get("feedback_description"))
+    subject = st.selectbox(
+        "Subject",
+        options=[
+            "General feedback",
+            "Feature request",
+            "Bug report",
+            "Other",
+        ],
+    )
+    feedback = st.text_area("Feedback", height=100)
+    if st.button("Submit", type="primary"):
+        st.session_state.db.collection("feedback").add(
+            {
+                "subject": subject,
+                "feedback": feedback,
+                "timestamp": firestore.SERVER_TIMESTAMP,
+            }
+        )
+        st.success("Feedback submitted successfully!")
 
 
 def setup_config_page():
@@ -233,9 +261,16 @@ def setup_chat_page():
 
 if __name__ == "__main__":
     st.session_state.setdefault("configured", False)
-    if "config" not in st.session_state:
-        with open("config.yaml", "r", encoding="utf-8") as file:
-            st.session_state.config = yaml.safe_load(file)
+    with open("config.yaml", "r", encoding="utf-8") as file:
+        st.session_state.config = yaml.safe_load(file)
+
+    if "db" not in st.session_state:
+        cert = st.secrets.get("FIREBASE_AUTH")[0]
+        cred = credentials.Certificate(cert)
+        # Avoid initializing the app multiple times
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+        st.session_state.db = firestore.client()
 
     setup_sidebar()
     if st.session_state.configured:

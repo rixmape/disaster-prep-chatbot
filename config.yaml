@@ -1,6 +1,9 @@
 app_description: |
   Our chatbot provides community-specific disaster preparedness information by leveraging large language models and a local information database. It is designed to deliver accurate and actionable guidance tailored to your immediate needs during emergency situations.
 
+feedback_description: |
+  Your feedback is essential to help us improve our chatbot's performance. Please let us know if you found the information helpful, if you have any suggestions for improvement, or if you encountered any issues.
+
 default_instructions: |
   As a disaster preparedness expert, your job is to provide accurate disaster preparedness information.
 
