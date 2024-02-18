@@ -52,8 +52,9 @@ def setup_sidebar():
                     f"\t/{name} {info['arg']}\n\n"
                 )
 
-        with st.expander("Feedback"):
-            setup_feedback_form()
+        if st.session_state.configured:
+            with st.expander("Feedback"):
+                setup_feedback_form()
 
         if "client" in st.session_state:
             st.download_button(
@@ -97,9 +98,16 @@ def setup_config_page():
         options=st.session_state.config["personalities"].keys(),
     )
 
+    if not firebase_admin._apps:  # Avoid reinitializing the app
+        cert = dict(st.secrets["FIREBASE_AUTH"])
+        cred = credentials.Certificate(cert)
+        firebase_admin.initialize_app(cred)
+        st.session_state.db = firestore.client()
+
     if st.button("Start chatting!"):
         if st.session_state.filenames:
             st.session_state.configured = True
+            st.rerun()
         else:
             st.error("No files uploaded.")
 
@@ -183,7 +191,7 @@ def setup_chat_page():
             st.status("Initializing chatbot..."),
         ):
             initialize_chatbot()
-            st.rerun()  # Refresh the page to update the session state
+            st.rerun()
 
     # TODO: Add initial message to the thread. Not currently supported by API.
     inital_message = st.session_state.config["initial_message"]
@@ -264,15 +272,8 @@ if __name__ == "__main__":
     with open("config.yaml", "r", encoding="utf-8") as file:
         st.session_state.config = yaml.safe_load(file)
 
-    if "db" not in st.session_state:
-        cert = st.secrets.get("FIREBASE_AUTH")[0]
-        cred = credentials.Certificate(cert)
-        # Avoid initializing the app multiple times
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(cred)
-        st.session_state.db = firestore.client()
-
     setup_sidebar()
+
     if st.session_state.configured:
         setup_chat_page()
     else:
