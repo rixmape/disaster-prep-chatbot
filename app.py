@@ -6,8 +6,10 @@ import json
 import os
 import time
 
+import firebase_admin
 import streamlit as st
 import yaml
+from firebase_admin import credentials, firestore
 from openai import OpenAI
 
 
@@ -29,17 +31,16 @@ def get_chat_history_json():
 
 def setup_sidebar():
     with st.sidebar:
-        st.title("Local Disaster Preparedness Chatbot")
+        st.title("Local Disaster Preparedness Bot")
         st.markdown(st.session_state.config["app_description"])
 
-        if "filenames" in st.session_state:
-            with st.expander("Uploaded files"):
-                st.markdown(
-                    "\n".join(
-                        f"- **{filename}**"
-                        for filename in st.session_state.filenames
-                    )
+        with st.expander("Uploaded files"):
+            st.markdown(
+                "\n".join(
+                    f"- **{filename}**"
+                    for filename in st.session_state.filenames
                 )
+            )
 
         with st.expander("Predefined commands"):
             commands = st.session_state.config["commands"]
@@ -50,30 +51,57 @@ def setup_sidebar():
                     f"\t/{name} {info['arg']}\n\n"
                 )
 
-        if "client" in st.session_state:
-            st.download_button(
-                label="Download Conversation",
-                data=get_chat_history_json(),
-                file_name=f"chat-history-{time.time()}.json",
-                mime="application/json",
-                use_container_width=True,
-                type="primary",
-            )
+        with st.expander("Feedback"):
+            setup_feedback_form()
+
+        st.download_button(
+            label="Download Conversation",
+            data=get_chat_history_json(),
+            file_name=f"chat-history-{time.time()}.json",
+            mime="application/json",
+            use_container_width=True,
+            type="primary",
+        )
+
+
+def setup_feedback_form():
+    st.write(st.session_state.config.get("feedback_description"))
+    subject = st.selectbox(
+        "Subject",
+        options=[
+            "General feedback",
+            "Feature request",
+            "Bug report",
+            "Other",
+        ],
+    )
+    feedback = st.text_area("Feedback", height=100)
+    if st.button("Submit", type="primary"):
+        st.session_state.db.collection("feedback").add(
+            {
+                "subject": subject,
+                "feedback": feedback,
+                "timestamp": firestore.SERVER_TIMESTAMP,
+            }
+        )
+        st.success("Feedback submitted successfully!")
 
 
 def setup_config_page():
-    st.title("Configure your chatbot")
-    st.session_state.filenames = os.listdir("documents")
+    st.title("Local Disaster Preparedness Bot")
+    st.write(st.session_state.config["app_description"])
+
+    st.header("Configuration")
     st.session_state.personality = st.selectbox(
         "Select a personality:",
         options=st.session_state.config["personalities"].keys(),
     )
 
     if st.button("Start chatting!"):
-        if st.session_state.filenames:
-            st.session_state.configured = True
-        else:
-            st.error("No files uploaded.")
+        with st.status("Initializing chatbot..."):
+            initialize_chatbot()
+        st.session_state.configured = True
+        st.rerun()
 
 
 def initialize_chatbot():
@@ -90,6 +118,7 @@ def initialize_chatbot():
     )
 
     st.write("Uploading files...")
+    st.session_state.filenames = os.listdir("documents")
     file_ids = get_file_ids()
 
     # TODO: Avoid creating a new assistant every time
@@ -108,6 +137,13 @@ def initialize_chatbot():
             file_ids=file_ids,
         ),
     )
+
+    st.write("Connecting to feedback database...")
+    if not firebase_admin._apps:  # Avoid reinitializing the app
+        cert = dict(st.secrets["FIREBASE_AUTH"])
+        cred = credentials.Certificate(cert)
+        firebase_admin.initialize_app(cred)
+        st.session_state.db = firestore.client()
 
 
 def get_file_ids():
@@ -148,14 +184,6 @@ def parse_slash_command(prompt):
 
 def setup_chat_page():
     st.title("Let's Chat!")
-
-    if "client" not in st.session_state:
-        with (
-            st.chat_message("assistant"),
-            st.status("Initializing chatbot..."),
-        ):
-            initialize_chatbot()
-            st.rerun()  # Refresh the page to update the session state
 
     # TODO: Add initial message to the thread. Not currently supported by API.
     inital_message = st.session_state.config["initial_message"]
@@ -233,12 +261,11 @@ def setup_chat_page():
 
 if __name__ == "__main__":
     st.session_state.setdefault("configured", False)
-    if "config" not in st.session_state:
-        with open("config.yaml", "r", encoding="utf-8") as file:
-            st.session_state.config = yaml.safe_load(file)
+    with open("config.yaml", "r", encoding="utf-8") as file:
+        st.session_state.config = yaml.safe_load(file)
 
-    setup_sidebar()
     if st.session_state.configured:
+        setup_sidebar()
         setup_chat_page()
     else:
         setup_config_page()
