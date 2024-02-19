@@ -13,6 +13,7 @@ from firebase_admin import credentials, firestore
 from openai import OpenAI
 
 
+@st.cache
 def get_chat_history_json():
     messages = st.session_state.client.beta.threads.messages.list(
         thread_id=st.session_state.thread.id,
