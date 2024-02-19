@@ -41,12 +41,24 @@ The Local Disaster Preparedness Chatbot is designed to provide accurate, recent,
    pip install -r requirements.txt
    ```
 
-4. **Set up API Keys:**
+4. **Set Up Secret Keys:**
 
    Create an `.streamlit/secrets.toml` file in your project directory and add your secret keys:
 
    ```plaintext
-   OPENAI_API_KEY='YOUR_OPENAI_API_KEY_HERE'
+   OPENAI_API_KEY =
+
+   [FIREBASE_AUTH]
+   type =
+   project_id =
+   private_key_id =
+   client_email =
+   client_id =
+   auth_uri =
+   token_uri =
+   auth_provider_x509_cert_url =
+   client_x509_cert_url =
+   universe_domain =
    ```
 
 5. **Configure `config.yaml`:**
