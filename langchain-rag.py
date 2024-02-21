@@ -45,7 +45,6 @@ def setup_retriever(path="documents"):
 
 
 def prompt_contextualizer(input):
-    # Do not contextualize the question if there is no history
     if not input["history"]:
         return input["question"]
 
@@ -65,11 +64,19 @@ def prompt_contextualizer(input):
     return prompt_template | ChatOpenAI() | StrOutputParser()
 
 
+def configure_chatbot():
+    st.write("Initializing message history...")
+    st.session_state.history = StreamlitChatMessageHistory()
+
+    st.write("Finishing chatbot configuration...")
+    st.session_state.configured = True
+    st.rerun()
+
+
 def setup_chat():
-    # Set up the chat history
-    msgs = StreamlitChatMessageHistory()
-    if len(msgs.messages) == 0:
-        msgs.add_ai_message("How can I help you?")
+    messages = st.session_state.history.messages
+    if not messages:
+        st.session_state.history.add_ai_message("How can I help you?")
 
     view_messages = st.expander("View the message contents in session state")
 
@@ -111,15 +118,15 @@ def setup_chat():
         }
     ).assign(answer=rag_chain_from_docs)
 
-    for msg in msgs.messages:
-        st.chat_message(msg.type).write(msg.content)
+    for message in messages:
+        st.chat_message(message.type).write(message.content)
 
     if prompt := st.chat_input():
         st.chat_message("human").write(prompt)
         response = rag_chain_with_source.invoke(
             {
                 "question": prompt,
-                "history": msgs.messages,
+                "history": messages,
             }
         )
 
@@ -137,8 +144,8 @@ def setup_chat():
             content = "\n".join([f"> {line}" for line in content.split("\n")])
             citations_container.markdown(f"**{source}**\n{content}")
 
-        msgs.add_user_message(prompt)
-        msgs.add_ai_message(response.get("answer"))
+        st.session_state.history.add_user_message(prompt)
+        st.session_state.history.add_ai_message(response.get("answer"))
 
     with view_messages:
         view_messages.json(st.session_state.langchain_messages)
@@ -148,4 +155,9 @@ if __name__ == "__main__":
     st.set_page_config(page_title="LangChain Q&A with RAG", page_icon="📖")
     st.title("📖 LangChain Q&A with RAG")
 
-    setup_chat()
+    st.session_state.setdefault("configured", False)
+
+    if not st.session_state.configured:
+        configure_chatbot()
+    else:
+        setup_chat()
