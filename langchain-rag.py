@@ -30,6 +30,25 @@ DOCS_DIR = "documents"
 # fmt: on
 
 
+def setup_configuration():
+    with open(CONFIG_FILE, "r", encoding="utf-8") as file:
+        st.session_state.config = yaml.safe_load(file)
+
+    st.write(st.session_state.config["app_description"])
+
+    st.header("Configuration")
+    st.session_state.personality = st.selectbox(
+        "Select a personality:",
+        options=st.session_state.config["personalities"].keys(),
+    )
+
+    if st.button("Start chatting!"):
+        with st.status("Initializing chatbot...", expanded=True):
+            initialize_chatbot()
+        st.session_state.configured = True
+        st.rerun()
+
+
 def setup_retriever():
     docs = []
 
@@ -72,11 +91,7 @@ def prompt_contextualizer(input):
     return prompt_template | ChatOpenAI() | StrOutputParser()
 
 
-def configure_chatbot():
-    st.write("Reading configuration file...")
-    with open(CONFIG_FILE, "r", encoding="utf-8") as file:
-        st.session_state.config = yaml.safe_load(file)
-
+def initialize_chatbot():
     st.write("Initializing message history...")
     st.session_state.history = StreamlitChatMessageHistory(key="messages")
 
@@ -95,8 +110,6 @@ def configure_chatbot():
         st.session_state.db = firestore.client()
 
     st.write("Finishing chatbot configuration...")
-    st.session_state.configured = True
-    st.rerun()
 
 
 def get_messages_dump():
@@ -255,7 +268,7 @@ if __name__ == "__main__":
     st.session_state.setdefault("configured", False)
 
     if not st.session_state.configured:
-        configure_chatbot()
+        setup_configuration()
     else:
         setup_sidebar()
         setup_chat()
