@@ -4,6 +4,7 @@ import os
 from operator import itemgetter
 
 import streamlit as st
+import yaml
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.document_loaders import TextLoader
@@ -19,6 +20,7 @@ os.environ["LANGCHAIN_API_KEY"] = st.secrets.get("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGCHAIN_PROJECT", "default")
 os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 
+CONFIG_FILE = "config.yaml"
 DOCS_DIR = "documents"
 
 # fmt: on
@@ -28,7 +30,7 @@ def setup_retriever():
     docs = []
 
     for file in st.session_state.filenames:
-        loader = TextLoader(file)
+        loader = TextLoader(os.path.join(DOCS_DIR, file))
         docs.extend(loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -67,12 +69,16 @@ def prompt_contextualizer(input):
 
 
 def configure_chatbot():
+    st.write("Reading configuration file...")
+    with open(CONFIG_FILE, "r", encoding="utf-8") as file:
+        st.session_state.config = yaml.safe_load(file)
+
     st.write("Initializing message history...")
     st.session_state.history = StreamlitChatMessageHistory(key="messages")
 
     st.write("Reading documents...")
     st.session_state.filenames = [
-        os.path.join(DOCS_DIR, file)
+        file
         for file in os.listdir(DOCS_DIR)
         if file.split(".")[-1] in ["txt", "md"]
     ]
@@ -80,6 +86,27 @@ def configure_chatbot():
     st.write("Finishing chatbot configuration...")
     st.session_state.configured = True
     st.rerun()
+
+
+def setup_sidebar():
+    st.title("Helpful Information")
+    st.write(st.session_state.config["app_description"])
+
+    with st.expander("Uploaded files"):
+        st.markdown(
+            "\n".join(
+                f"- **{filename}**" for filename in st.session_state.filenames
+            )
+        )
+
+    with st.expander("Predefined commands"):
+        commands = st.session_state.config["commands"]
+        for name, info in commands.items():
+            st.markdown(
+                f":green[**{name}**] : {info['description']}\n\n"
+                "Sample usage:\n\n"
+                f"\t/{name} {info['arg']}\n\n"
+            )
 
 
 def setup_chat():
@@ -168,4 +195,6 @@ if __name__ == "__main__":
     if not st.session_state.configured:
         configure_chatbot()
     else:
+        with st.sidebar:
+            setup_sidebar()
         setup_chat()
