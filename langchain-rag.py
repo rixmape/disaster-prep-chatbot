@@ -102,6 +102,43 @@ def initialize_chatbot():
         if file.split(".")[-1] in ["txt", "md"]
     ]
 
+    st.write("Setting up document retriever...")
+    retriever = setup_retriever()
+
+    st.write("Setting up chatbot pipeline...")
+    system_prompt = """You are an assistant for question-answering tasks. \
+    Use the following pieces of retrieved context to answer the question. \
+    If you don't know the answer, just say that you don't know. \
+    Use three sentences maximum and keep the answer concise.\
+
+    {context}"""
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}"),
+        ]
+    )
+    rag_chain_from_docs = (
+        RunnablePassthrough.assign(
+            context=(
+                lambda docs: "\n\n".join(
+                    doc.page_content for doc in docs["context"]
+                )
+            )
+        )
+        | prompt_template
+        | ChatOpenAI()
+        | StrOutputParser()
+    )
+    st.session_state.chatbot = RunnableParallel(
+        {
+            "question": itemgetter("question"),
+            "history": itemgetter("history"),
+            "context": prompt_contextualizer | retriever,
+        }
+    ).assign(answer=rag_chain_from_docs)
+
     st.write("Connecting to user feedback database...")
     if not firebase_admin._apps:
         cert = dict(st.secrets["FIREBASE_AUTH"])
@@ -190,50 +227,12 @@ def setup_chat():
 
     view_messages = st.expander("View the message contents in session state")
 
-    retriever = setup_retriever()
-
-    system_prompt = """You are an assistant for question-answering tasks. \
-    Use the following pieces of retrieved context to answer the question. \
-    If you don't know the answer, just say that you don't know. \
-    Use three sentences maximum and keep the answer concise.\
-
-    {context}"""
-
-    prompt_template = ChatPromptTemplate.from_messages(
-        [
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}"),
-        ]
-    )
-
-    rag_chain_from_docs = (
-        RunnablePassthrough.assign(
-            context=(
-                lambda docs: "\n\n".join(
-                    doc.page_content for doc in docs["context"]
-                )
-            )
-        )
-        | prompt_template
-        | ChatOpenAI()
-        | StrOutputParser()
-    )
-
-    rag_chain_with_source = RunnableParallel(
-        {
-            "question": itemgetter("question"),
-            "history": itemgetter("history"),
-            "context": prompt_contextualizer | retriever,
-        }
-    ).assign(answer=rag_chain_from_docs)
-
     for message in st.session_state.messages:
         st.chat_message(message.type).write(message.content)
 
     if prompt := st.chat_input():
         st.chat_message("human").write(prompt)
-        response = rag_chain_with_source.invoke(
+        response = st.session_state.chatbot.invoke(
             {
                 "question": prompt,
                 "history": st.session_state.messages,
