@@ -69,72 +69,81 @@ def format_docs(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 
-st.set_page_config(page_title="LangChain Q&A with RAG", page_icon="📖")
-st.title("📖 LangChain Q&A with RAG")
+def setup_chat():
+    # Set up the chat history
+    msgs = StreamlitChatMessageHistory()
+    if len(msgs.messages) == 0:
+        msgs.add_ai_message("How can I help you?")
 
-# Set up the chat history
-msgs = StreamlitChatMessageHistory()
-if len(msgs.messages) == 0:
-    msgs.add_ai_message("How can I help you?")
+    view_messages = st.expander("View the message contents in session state")
 
-view_messages = st.expander("View the message contents in session state")
+    retriever = setup_retriever()
 
-retriever = setup_retriever()
+    system_prompt = """You are an assistant for question-answering tasks. \
+    Use the following pieces of retrieved context to answer the question. \
+    If you don't know the answer, just say that you don't know. \
+    Use three sentences maximum and keep the answer concise.\
 
-system_prompt = """You are an assistant for question-answering tasks. \
-Use the following pieces of retrieved context to answer the question. \
-If you don't know the answer, just say that you don't know. \
-Use three sentences maximum and keep the answer concise.\
+    {context}"""
 
-{context}"""
-
-prompt_template = ChatPromptTemplate.from_messages(
-    [
-        ("system", system_prompt),
-        MessagesPlaceholder(variable_name="history"),
-        ("human", "{question}"),
-    ]
-)
-
-rag_chain_from_docs = (
-    RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
-    | prompt_template
-    | ChatOpenAI()
-    | StrOutputParser()
-)
-
-rag_chain_with_source = RunnableParallel(
-    {
-        "question": itemgetter("question"),
-        "history": itemgetter("history"),
-        "context": prompt_contextualizer | retriever,
-    }
-).assign(answer=rag_chain_from_docs)
-
-for msg in msgs.messages:
-    st.chat_message(msg.type).write(msg.content)
-
-if prompt := st.chat_input():
-    st.chat_message("human").write(prompt)
-    response = rag_chain_with_source.invoke(
-        {
-            "question": prompt,
-            "history": msgs.messages,
-        }
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}"),
+        ]
     )
 
-    with st.chat_message("ai"):
-        st.write(response.get("answer"))
+    rag_chain_from_docs = (
+        RunnablePassthrough.assign(
+            context=(lambda x: format_docs(x["context"]))
+        )
+        | prompt_template
+        | ChatOpenAI()
+        | StrOutputParser()
+    )
 
-        citation_container = st.expander(f"File Citations:", expanded=False)
-        for citation in response.get("context"):
-            source = citation.metadata.get("source")
-            content = citation.page_content.replace("#", "")
-            content = "\n".join([f"> {line}" for line in content.split("\n")])
-            citation_container.markdown(f"**{source}**\n{content}")
+    rag_chain_with_source = RunnableParallel(
+        {
+            "question": itemgetter("question"),
+            "history": itemgetter("history"),
+            "context": prompt_contextualizer | retriever,
+        }
+    ).assign(answer=rag_chain_from_docs)
 
-    msgs.add_user_message(prompt)
-    msgs.add_ai_message(response.get("answer"))
+    for msg in msgs.messages:
+        st.chat_message(msg.type).write(msg.content)
 
-with view_messages:
-    view_messages.json(st.session_state.langchain_messages)
+    if prompt := st.chat_input():
+        st.chat_message("human").write(prompt)
+        response = rag_chain_with_source.invoke(
+            {
+                "question": prompt,
+                "history": msgs.messages,
+            }
+        )
+
+        with st.chat_message("ai"):
+            st.write(response.get("answer"))
+
+            citation_container = st.expander(f"File Citations:", expanded=False)
+            for citation in response.get("context"):
+                source = citation.metadata.get("source")
+                content = citation.page_content.replace("#", "")
+                content = "\n".join(
+                    [f"> {line}" for line in content.split("\n")]
+                )
+                citation_container.markdown(f"**{source}**\n{content}")
+
+        msgs.add_user_message(prompt)
+        msgs.add_ai_message(response.get("answer"))
+
+    with view_messages:
+        view_messages.json(st.session_state.langchain_messages)
+
+
+if __name__ == "__main__":
+    st.set_page_config(page_title="LangChain Q&A with RAG", page_icon="📖")
+    st.title("📖 LangChain Q&A with RAG")
+
+    setup_chat()
