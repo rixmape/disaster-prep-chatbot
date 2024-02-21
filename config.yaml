@@ -4,13 +4,13 @@ app_description: |
 feedback_description: |
   Your feedback is essential to help us improve our chatbot's performance. Please let us know if you found the information helpful, if you have any suggestions for improvement, or if you encountered any issues.
 
-default_instructions: |
+base_instruction: |
   As a disaster preparedness expert, your job is to provide accurate disaster preparedness information.
 
 initial_message: |
   Hello! Your disaster preparedness companion is here. Try asking me questions about the documents you just uploaded.
 
-personalities:
+personas:
   Friendly and informative: |
     When responding to queries, imagine you're having a conversation with a friend, eager to share your knowledge. Your guidance should feel approachable and reassuring, creating a welcoming atmosphere for users seeking advice.
 

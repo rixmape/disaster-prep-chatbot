@@ -37,10 +37,11 @@ def setup_configuration():
     st.write(st.session_state.config["app_description"])
 
     st.header("Configuration")
-    st.session_state.personality = st.selectbox(
-        "Select a personality:",
-        options=st.session_state.config["personalities"].keys(),
+    persona = st.selectbox(
+        "Select a persona:",
+        options=st.session_state.config["personas"].keys(),
     )
+    st.session_state.persona = st.session_state.config["personas"][persona]
 
     if st.button("Start chatting!"):
         with st.status("Initializing chatbot...", expanded=True):
@@ -75,20 +76,31 @@ def prompt_contextualizer(input):
     if not input["history"]:
         return input["question"]
 
-    system_prompt = """Given a chat history and the latest user question \
-    which might reference context in the chat history, formulate a standalone \
-    question which can be understood without the chat history. Do NOT answer \
-    the question, just reformulate it if needed."""
-
+    prompt = (
+        "Given a chat history and the latest user question which might"
+        " reference context in the chat history, formulate a standalone"
+        " question which can be understood without the chat history. Do"
+        " not answer the question, just reformulate only if needed."
+    )
     prompt_template = ChatPromptTemplate.from_messages(
         [
-            ("system", system_prompt),
+            ("system", prompt),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}"),
         ]
     )
 
     return prompt_template | ChatOpenAI() | StrOutputParser()
+
+
+def format_docs(docs):
+    context = "\n\n".join(
+        [
+            f'Document {i}:\n\n"""\n{doc.page_content}\n"""'
+            for i, doc in enumerate(docs, start=1)
+        ]
+    )
+    return f"Use the following documents to answer the query.\n\n{context}"
 
 
 def initialize_chatbot():
@@ -106,26 +118,23 @@ def initialize_chatbot():
     retriever = setup_retriever()
 
     st.write("Setting up chatbot pipeline...")
-    system_prompt = """You are an assistant for question-answering tasks. \
-    Use the following pieces of retrieved context to answer the question. \
-    If you don't know the answer, just say that you don't know. \
-    Use three sentences maximum and keep the answer concise.\
-
-    {context}"""
+    chatbot_instruction = " ".join(
+        [
+            st.session_state.config["base_instruction"].strip(),
+            st.session_state.persona.strip(),
+            "{context}",
+        ]
+    )
     prompt_template = ChatPromptTemplate.from_messages(
         [
-            ("system", system_prompt),
+            ("system", chatbot_instruction),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}"),
         ]
     )
     rag_chain_from_docs = (
         RunnablePassthrough.assign(
-            context=(
-                lambda docs: "\n\n".join(
-                    doc.page_content for doc in docs["context"]
-                )
-            )
+            context=(lambda docs: format_docs(docs["context"]))
         )
         | prompt_template
         | ChatOpenAI()
