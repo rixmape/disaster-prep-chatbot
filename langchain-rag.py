@@ -65,10 +65,6 @@ def prompt_contextualizer(input):
     return prompt_template | ChatOpenAI() | StrOutputParser()
 
 
-def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
-
-
 def setup_chat():
     # Set up the chat history
     msgs = StreamlitChatMessageHistory()
@@ -96,7 +92,11 @@ def setup_chat():
 
     rag_chain_from_docs = (
         RunnablePassthrough.assign(
-            context=(lambda x: format_docs(x["context"]))
+            context=(
+                lambda docs: "\n\n".join(
+                    doc.page_content for doc in docs["context"]
+                )
+            )
         )
         | prompt_template
         | ChatOpenAI()
