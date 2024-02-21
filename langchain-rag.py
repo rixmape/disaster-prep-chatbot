@@ -1,7 +1,9 @@
 # fmt: off
 
+import json
 import os
 from operator import itemgetter
+import time
 
 import streamlit as st
 import yaml
@@ -88,6 +90,16 @@ def configure_chatbot():
     st.rerun()
 
 
+def get_messages_dump():
+    return json.dumps(
+        [
+            {"type": message.type, "content": message.content}
+            for message in st.session_state.messages
+        ],
+        indent=4,
+    )
+
+
 def setup_sidebar():
     st.title("Helpful Information")
     st.write(st.session_state.config["app_description"])
@@ -107,6 +119,15 @@ def setup_sidebar():
                 "Sample usage:\n\n"
                 f"\t/{name} {info['arg']}\n\n"
             )
+
+    st.download_button(
+        label="Download Conversation",
+        data=get_messages_dump(),
+        file_name=f"chat-history-{time.time()}.json",
+        mime="application/json",
+        use_container_width=True,
+        type="primary",
+    )
 
 
 def setup_chat():
