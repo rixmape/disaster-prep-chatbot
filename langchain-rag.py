@@ -19,14 +19,16 @@ os.environ["LANGCHAIN_API_KEY"] = st.secrets.get("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGCHAIN_PROJECT", "default")
 os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 
+DOCS_DIR = "documents"
+
 # fmt: on
 
 
-def setup_retriever(path="documents"):
+def setup_retriever():
     docs = []
 
-    for file in os.listdir(path):
-        loader = TextLoader(f"{path}/{file}")
+    for file in st.session_state.filenames:
+        loader = TextLoader(file)
         docs.extend(loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -67,6 +69,13 @@ def prompt_contextualizer(input):
 def configure_chatbot():
     st.write("Initializing message history...")
     st.session_state.history = StreamlitChatMessageHistory(key="messages")
+
+    st.write("Reading documents...")
+    st.session_state.filenames = [
+        os.path.join(DOCS_DIR, file)
+        for file in os.listdir(DOCS_DIR)
+        if file.split(".")[-1] in ["txt", "md"]
+    ]
 
     st.write("Finishing chatbot configuration...")
     st.session_state.configured = True
