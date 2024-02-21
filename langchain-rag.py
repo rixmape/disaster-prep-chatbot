@@ -2,11 +2,13 @@
 
 import json
 import os
-from operator import itemgetter
 import time
+from operator import itemgetter
 
+import firebase_admin
 import streamlit as st
 import yaml
+from firebase_admin import credentials, firestore
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.document_loaders import TextLoader
@@ -85,6 +87,13 @@ def configure_chatbot():
         if file.split(".")[-1] in ["txt", "md"]
     ]
 
+    st.write("Connecting to user feedback database...")
+    if not firebase_admin._apps:
+        cert = dict(st.secrets["FIREBASE_AUTH"])
+        cred = credentials.Certificate(cert)
+        firebase_admin.initialize_app(cred)
+        st.session_state.db = firestore.client()
+
     st.write("Finishing chatbot configuration...")
     st.session_state.configured = True
     st.rerun()
@@ -101,6 +110,13 @@ def get_messages_dump():
 
 
 def setup_sidebar():
+    with st.sidebar:
+        setup_helpful_info()
+        st.divider()
+        setup_feedback_form()
+
+
+def setup_helpful_info():
     st.title("Helpful Information")
     st.write(st.session_state.config["app_description"])
 
@@ -128,6 +144,31 @@ def setup_sidebar():
         use_container_width=True,
         type="primary",
     )
+
+
+def setup_feedback_form():
+    st.title("Feedback")
+    st.write(st.session_state.config.get("feedback_description"))
+
+    subject = st.selectbox(
+        "Subject",
+        options=[
+            "General feedback",
+            "Feature request",
+            "Bug report",
+            "Other",
+        ],
+    )
+    feedback = st.text_area("Feedback", height=100)
+    if st.button("Submit", type="primary"):
+        st.session_state.db.collection("feedback").add(
+            {
+                "subject": subject,
+                "feedback": feedback,
+                "timestamp": firestore.SERVER_TIMESTAMP,
+            }
+        )
+        st.success("Feedback submitted successfully!")
 
 
 def setup_chat():
@@ -216,6 +257,5 @@ if __name__ == "__main__":
     if not st.session_state.configured:
         configure_chatbot()
     else:
-        with st.sidebar:
-            setup_sidebar()
+        setup_sidebar()
         setup_chat()
