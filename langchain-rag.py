@@ -66,7 +66,7 @@ def prompt_contextualizer(input):
 
 def configure_chatbot():
     st.write("Initializing message history...")
-    st.session_state.history = StreamlitChatMessageHistory()
+    st.session_state.history = StreamlitChatMessageHistory(key="messages")
 
     st.write("Finishing chatbot configuration...")
     st.session_state.configured = True
@@ -74,8 +74,7 @@ def configure_chatbot():
 
 
 def setup_chat():
-    messages = st.session_state.history.messages
-    if not messages:
+    if not st.session_state.messages:
         st.session_state.history.add_ai_message("How can I help you?")
 
     view_messages = st.expander("View the message contents in session state")
@@ -118,7 +117,7 @@ def setup_chat():
         }
     ).assign(answer=rag_chain_from_docs)
 
-    for message in messages:
+    for message in st.session_state.messages:
         st.chat_message(message.type).write(message.content)
 
     if prompt := st.chat_input():
@@ -126,7 +125,7 @@ def setup_chat():
         response = rag_chain_with_source.invoke(
             {
                 "question": prompt,
-                "history": messages,
+                "history": st.session_state.messages,
             }
         )
 
@@ -148,7 +147,7 @@ def setup_chat():
         st.session_state.history.add_ai_message(response.get("answer"))
 
     with view_messages:
-        view_messages.json(st.session_state.langchain_messages)
+        view_messages.json(st.session_state.messages)
 
 
 if __name__ == "__main__":
