@@ -123,17 +123,19 @@ def setup_chat():
             }
         )
 
-        with st.chat_message("ai"):
-            st.write(response.get("answer"))
+        ai_message = st.chat_message("ai")
+        ai_message.write(response.get("answer"))
 
-            citation_container = st.expander(f"File Citations:", expanded=False)
-            for citation in response.get("context"):
-                source = citation.metadata.get("source")
-                content = citation.page_content.replace("#", "")
-                content = "\n".join(
-                    [f"> {line}" for line in content.split("\n")]
-                )
-                citation_container.markdown(f"**{source}**\n{content}")
+        citations = response.get("context")
+        citations_container = ai_message.expander(
+            f"File Citations ({len(citations)}):",
+            expanded=False,
+        )
+        for citation in response.get("context"):
+            source = citation.metadata.get("source")
+            content = citation.page_content.replace("#", "")
+            content = "\n".join([f"> {line}" for line in content.split("\n")])
+            citations_container.markdown(f"**{source}**\n{content}")
 
         msgs.add_user_message(prompt)
         msgs.add_ai_message(response.get("answer"))
