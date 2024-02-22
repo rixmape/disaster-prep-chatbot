@@ -1,9 +1,14 @@
 # fmt: off
 
+import json
 import os
+import time
 from operator import itemgetter
 
+import firebase_admin
 import streamlit as st
+import yaml
+from firebase_admin import credentials, firestore
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.document_loaders import TextLoader
@@ -19,14 +24,54 @@ os.environ["LANGCHAIN_API_KEY"] = st.secrets.get("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGCHAIN_PROJECT", "default")
 os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 
+CONFIG_FILE = "config.yaml"
+DOCS_DIR = "documents"
+
 # fmt: on
 
 
-def setup_retriever(path="documents"):
+def setup_configuration():
+    with open(CONFIG_FILE, "r", encoding="utf-8") as file:
+        st.session_state.config = yaml.safe_load(file)
+
+    st.title("🐱‍🚀 Disaster Preparedness Bot")
+    st.write(st.session_state.config["descriptions"]["app"])
+
+    st.subheader("How should I answer your questions?")
+    col1, col2 = st.columns([0.4, 0.6])
+    personas = st.session_state.config["personas"]
+    with col1:
+        selected_persona = st.radio(
+            label="Select a persona:",
+            options=list(personas.keys()) + ["Custom"],
+            label_visibility="collapsed",
+        )
+    with col2, st.container(border=True):
+        st.markdown("**Instruction:**")
+        if selected_persona == "Custom":
+            description = st.text_area(
+                label="Chatbot Persona Description:",
+                placeholder="Describe the chatbot's persona...",
+                height=100,
+                label_visibility="collapsed",
+            )
+        else:
+            description = personas[selected_persona].strip()
+            st.markdown(description)
+    st.session_state.persona_desc = description
+
+    if st.button("Start chatting!"):
+        with st.status("Initializing chatbot...", expanded=True):
+            initialize_chatbot()
+        st.session_state.is_configured_by_user = True
+        st.rerun()
+
+
+def setup_retriever():
     docs = []
 
-    for file in os.listdir(path):
-        loader = TextLoader(f"{path}/{file}")
+    for file in st.session_state.filenames:
+        loader = TextLoader(os.path.join(DOCS_DIR, file))
         docs.extend(loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -45,18 +90,19 @@ def setup_retriever(path="documents"):
 
 
 def prompt_contextualizer(input):
-    # Do not contextualize the question if there is no history
     if not input["history"]:
         return input["question"]
 
-    system_prompt = """Given a chat history and the latest user question \
-    which might reference context in the chat history, formulate a standalone \
-    question which can be understood without the chat history. Do NOT answer \
-    the question, just reformulate it if needed."""
-
+    # FIX: Can't access session state. Hardcoding the prompt for now.
+    prompt = (
+        "Given a chat history and the latest user question which might"
+        " reference context in the chat history, formulate a standalone"
+        " question which can be understood without the chat history. Do"
+        " not answer the question, just reformulate only if needed."
+    )
     prompt_template = ChatPromptTemplate.from_messages(
         [
-            ("system", system_prompt),
+            ("system", prompt),
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}"),
         ]
@@ -66,75 +112,186 @@ def prompt_contextualizer(input):
 
 
 def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
+    context = "\n\n".join(
+        [
+            f'Document {i}:\n\n"""\n{doc.page_content}\n"""'
+            for i, doc in enumerate(docs, start=1)
+        ]
+    )
+    return f"Use the following documents to answer the query.\n\n{context}"
 
 
-st.set_page_config(page_title="LangChain Q&A with RAG", page_icon="📖")
-st.title("📖 LangChain Q&A with RAG")
+def initialize_chatbot():
+    st.write("Initializing message history...")
+    st.session_state.history = StreamlitChatMessageHistory(key="messages")
+    if not st.session_state.messages:
+        initial_message = st.session_state.config["prompts"]["initial"].strip()
+        st.session_state.history.add_ai_message(initial_message)
 
-# Set up the chat history
-msgs = StreamlitChatMessageHistory()
-if len(msgs.messages) == 0:
-    msgs.add_ai_message("How can I help you?")
-
-view_messages = st.expander("View the message contents in session state")
-
-retriever = setup_retriever()
-
-system_prompt = """You are an assistant for question-answering tasks. \
-Use the following pieces of retrieved context to answer the question. \
-If you don't know the answer, just say that you don't know. \
-Use three sentences maximum and keep the answer concise.\
-
-{context}"""
-
-prompt_template = ChatPromptTemplate.from_messages(
-    [
-        ("system", system_prompt),
-        MessagesPlaceholder(variable_name="history"),
-        ("human", "{question}"),
+    st.write("Reading documents...")
+    st.session_state.filenames = [
+        file
+        for file in os.listdir(DOCS_DIR)
+        if file.split(".")[-1] in ["txt", "md"]
     ]
-)
 
-rag_chain_from_docs = (
-    RunnablePassthrough.assign(context=(lambda x: format_docs(x["context"])))
-    | prompt_template
-    | ChatOpenAI()
-    | StrOutputParser()
-)
+    st.write("Setting up document retriever...")
+    retriever = setup_retriever()
 
-rag_chain_with_source = RunnableParallel(
-    {
-        "question": itemgetter("question"),
-        "history": itemgetter("history"),
-        "context": prompt_contextualizer | retriever,
-    }
-).assign(answer=rag_chain_from_docs)
-
-for msg in msgs.messages:
-    st.chat_message(msg.type).write(msg.content)
-
-if prompt := st.chat_input():
-    st.chat_message("human").write(prompt)
-    response = rag_chain_with_source.invoke(
+    st.write("Setting up chatbot pipeline...")
+    chatbot_instruction = " ".join(
+        [
+            st.session_state.config["prompts"]["main_instruction"].strip(),
+            st.session_state.persona_desc,
+            "{context}",
+        ]
+    )
+    prompt_template = ChatPromptTemplate.from_messages(
+        [
+            ("system", chatbot_instruction),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "{question}"),
+        ]
+    )
+    rag_chain_from_docs = (
+        RunnablePassthrough.assign(
+            context=(lambda docs: format_docs(docs["context"]))
+        )
+        | prompt_template
+        | ChatOpenAI()
+        | StrOutputParser()
+    )
+    st.session_state.chatbot = RunnableParallel(
         {
-            "question": prompt,
-            "history": msgs.messages,
+            "question": itemgetter("question"),
+            "history": itemgetter("history"),
+            "context": prompt_contextualizer | retriever,
         }
+    ).assign(answer=rag_chain_from_docs)
+
+    st.write("Connecting to user feedback database...")
+    if not firebase_admin._apps:
+        cert = dict(st.secrets["FIREBASE_AUTH"])
+        cred = credentials.Certificate(cert)
+        firebase_admin.initialize_app(cred)
+        st.session_state.db = firestore.client()
+
+    st.write("Finishing chatbot configuration...")
+
+
+def serialize_chat_history():
+    return json.dumps(
+        [
+            {"type": message.type, "content": message.content}
+            for message in st.session_state.messages
+        ],
+        indent=4,
     )
 
-    with st.chat_message("ai"):
-        st.write(response.get("answer"))
 
-        citation_container = st.expander(f"File Citations:", expanded=False)
+def setup_sidebar():
+    with st.sidebar:
+        setup_helpful_info()
+        st.divider()
+        setup_feedback_form()
+
+
+def setup_helpful_info():
+    st.title("Helpful Information")
+    st.write(st.session_state.config["descriptions"]["app"])
+
+    with st.expander("Uploaded files"):
+        st.markdown(
+            "\n".join(f"- **{name}**" for name in st.session_state.filenames)
+        )
+
+    with st.expander("Predefined commands"):
+        commands = st.session_state.config["commands"]
+        for name, info in commands.items():
+            st.markdown(
+                f":green[**{name}**] : {info['description']}\n\n"
+                "Sample usage:\n\n"
+                f"\t/{name} {info['arg']}\n\n"
+            )
+
+    chat_history = serialize_chat_history()
+    filename = f"conversation_{int(time.time())}.json"
+    st.download_button(
+        label="Download Conversation as JSON",
+        data=chat_history,
+        file_name=filename,
+        mime="application/json",
+        use_container_width=True,
+        type="primary",
+    )
+
+
+def setup_feedback_form():
+    st.title("Feedback")
+    st.write(st.session_state.config["descriptions"]["feedback"])
+
+    subject = st.selectbox(
+        "Subject",
+        options=[
+            "General feedback",
+            "Feature request",
+            "Bug report",
+            "Other",
+        ],
+    )
+    feedback = st.text_area("User Feedback", height=100)
+
+    if st.button("Submit", type="primary"):
+        if feedback:
+            st.session_state.db.collection("feedback").add(
+                {
+                    "subject": subject,
+                    "feedback": feedback,
+                    "timestamp": firestore.SERVER_TIMESTAMP,
+                }
+            )
+            st.success("Feedback submitted successfully!", icon="🚀")
+        else:
+            st.error("Give feedback before submitting.", icon="🙀")
+
+
+def setup_chat():
+    for message in st.session_state.messages:
+        st.chat_message(message.type).write(message.content)
+
+    if prompt := st.chat_input():
+        st.chat_message("human").write(prompt)
+        response = st.session_state.chatbot.invoke(
+            {
+                "question": prompt,
+                "history": st.session_state.messages,
+            }
+        )
+
+        ai_message = st.chat_message("ai")
+        ai_message.write(response.get("answer"))
+
+        citations = response.get("context")
+        citations_container = ai_message.expander(
+            f"File Citations ({len(citations)}):",
+            expanded=False,
+        )
         for citation in response.get("context"):
             source = citation.metadata.get("source")
             content = citation.page_content.replace("#", "")
             content = "\n".join([f"> {line}" for line in content.split("\n")])
-            citation_container.markdown(f"**{source}**\n{content}")
+            citations_container.markdown(f"**{source}**\n{content}")
 
-    msgs.add_user_message(prompt)
-    msgs.add_ai_message(response.get("answer"))
+        st.session_state.history.add_user_message(prompt)
+        st.session_state.history.add_ai_message(response.get("answer"))
 
-with view_messages:
-    view_messages.json(st.session_state.langchain_messages)
+
+if __name__ == "__main__":
+    st.set_page_config(page_title="Disaster Preparedness Bot", page_icon="🐱‍🚀")
+    st.session_state.setdefault("is_configured_by_user", False)
+
+    if not st.session_state.is_configured_by_user:
+        setup_configuration()
+    else:
+        setup_sidebar()
+        setup_chat()
