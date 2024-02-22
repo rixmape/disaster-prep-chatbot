@@ -34,18 +34,36 @@ def setup_configuration():
     with open(CONFIG_FILE, "r", encoding="utf-8") as file:
         st.session_state.config = yaml.safe_load(file)
 
+    st.title("🐱‍🚀 Disaster Preparedness Bot")
     st.write(st.session_state.config["descriptions"]["app"])
 
-    st.subheader("Configuration")
-    persona = st.selectbox(
-        "Select a persona:",
-        options=st.session_state.config["personas"].keys(),
-    )
+    st.subheader("How should I answer your questions?")
+    col1, col2 = st.columns([0.4, 0.6])
+    personas = st.session_state.config["personas"]
+    with col1:
+        selected_persona = st.radio(
+            label="Select a persona:",
+            options=list(personas.keys()) + ["Custom"],
+            label_visibility="collapsed",
+        )
+    with col2, st.container(border=True):
+        st.markdown("**Instruction:**")
+        if selected_persona == "Custom":
+            description = st.text_area(
+                label="Chatbot Persona Description:",
+                placeholder="Describe the chatbot's persona...",
+                height=100,
+                label_visibility="collapsed",
+            )
+        else:
+            description = personas[selected_persona].strip()
+            st.markdown(description)
+    st.session_state.persona_desc = description
 
     if st.button("Start chatting!"):
         with st.status("Initializing chatbot...", expanded=True):
-            initialize_chatbot(persona)
-        st.session_state.configured = True
+            initialize_chatbot()
+        st.session_state.is_configured_by_user = True
         st.rerun()
 
 
@@ -103,7 +121,7 @@ def format_docs(docs):
     return f"Use the following documents to answer the query.\n\n{context}"
 
 
-def initialize_chatbot(persona):
+def initialize_chatbot():
     st.write("Initializing message history...")
     st.session_state.history = StreamlitChatMessageHistory(key="messages")
     if not st.session_state.messages:
@@ -124,7 +142,7 @@ def initialize_chatbot(persona):
     chatbot_instruction = " ".join(
         [
             st.session_state.config["prompts"]["main_instruction"].strip(),
-            st.session_state.config["personas"][persona].strip(),
+            st.session_state.persona_desc,
             "{context}",
         ]
     )
@@ -270,11 +288,9 @@ def setup_chat():
 
 if __name__ == "__main__":
     st.set_page_config(page_title="Disaster Preparedness Bot", page_icon="🐱‍🚀")
-    st.title("🐱‍🚀 Disaster Preparedness Bot")
+    st.session_state.setdefault("is_configured_by_user", False)
 
-    st.session_state.setdefault("configured", False)
-
-    if not st.session_state.configured:
+    if not st.session_state.is_configured_by_user:
         setup_configuration()
     else:
         setup_sidebar()
