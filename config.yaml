@@ -1,14 +1,19 @@
-app_description: |
-  Our chatbot provides community-specific disaster preparedness information by leveraging large language models and a local information database. It is designed to deliver accurate and actionable guidance tailored to your immediate needs during emergency situations.
+descriptions:
+  app: |
+    Our chatbot provides community-specific disaster preparedness information by leveraging large language models and a local information database. It is designed to deliver accurate and actionable guidance tailored to your immediate needs during emergency situations.
 
-feedback_description: |
-  Your feedback is essential to help us improve our chatbot's performance. Please let us know if you found the information helpful, if you have any suggestions for improvement, or if you encountered any issues.
+  feedback: |
+    Your feedback is essential to help us improve our chatbot's performance. Please let us know if you found the information helpful, if you have any suggestions for improvement, or if you encountered any issues.
 
-base_instruction: |
-  As a disaster preparedness expert, your job is to provide accurate disaster preparedness information.
+prompts:
+  main_instruction: |
+    As a disaster preparedness expert, your job is to provide accurate disaster preparedness information.
 
-initial_message: |
-  Hello! Your disaster preparedness companion is here. Try asking me questions about the documents you just uploaded.
+  initial: |
+    Hello! Your disaster preparedness companion is here. Try asking me questions about Barangay Tinago, Ligao City. I have a wealth of information about disaster preparedness in your area.
+
+  contextualize: |
+    Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do not answer the question, just reformulate only if needed.
 
 personas:
   Friendly and informative: |

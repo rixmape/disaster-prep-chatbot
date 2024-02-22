@@ -34,18 +34,17 @@ def setup_configuration():
     with open(CONFIG_FILE, "r", encoding="utf-8") as file:
         st.session_state.config = yaml.safe_load(file)
 
-    st.write(st.session_state.config["app_description"])
+    st.write(st.session_state.config["descriptions"]["app"])
 
-    st.header("Configuration")
+    st.subheader("Configuration")
     persona = st.selectbox(
         "Select a persona:",
         options=st.session_state.config["personas"].keys(),
     )
-    st.session_state.persona = st.session_state.config["personas"][persona]
 
     if st.button("Start chatting!"):
         with st.status("Initializing chatbot...", expanded=True):
-            initialize_chatbot()
+            initialize_chatbot(persona)
         st.session_state.configured = True
         st.rerun()
 
@@ -76,6 +75,7 @@ def prompt_contextualizer(input):
     if not input["history"]:
         return input["question"]
 
+    # FIX: Can't access session state. Hardcoding the prompt for now.
     prompt = (
         "Given a chat history and the latest user question which might"
         " reference context in the chat history, formulate a standalone"
@@ -103,9 +103,12 @@ def format_docs(docs):
     return f"Use the following documents to answer the query.\n\n{context}"
 
 
-def initialize_chatbot():
+def initialize_chatbot(persona):
     st.write("Initializing message history...")
     st.session_state.history = StreamlitChatMessageHistory(key="messages")
+    if not st.session_state.messages:
+        initial_message = st.session_state.config["prompts"]["initial"].strip()
+        st.session_state.history.add_ai_message(initial_message)
 
     st.write("Reading documents...")
     st.session_state.filenames = [
@@ -120,8 +123,8 @@ def initialize_chatbot():
     st.write("Setting up chatbot pipeline...")
     chatbot_instruction = " ".join(
         [
-            st.session_state.config["base_instruction"].strip(),
-            st.session_state.persona.strip(),
+            st.session_state.config["prompts"]["main_instruction"].strip(),
+            st.session_state.config["personas"][persona].strip(),
             "{context}",
         ]
     )
@@ -158,7 +161,7 @@ def initialize_chatbot():
     st.write("Finishing chatbot configuration...")
 
 
-def get_messages_dump():
+def serialize_chat_history():
     return json.dumps(
         [
             {"type": message.type, "content": message.content}
@@ -177,13 +180,11 @@ def setup_sidebar():
 
 def setup_helpful_info():
     st.title("Helpful Information")
-    st.write(st.session_state.config["app_description"])
+    st.write(st.session_state.config["descriptions"]["app"])
 
     with st.expander("Uploaded files"):
         st.markdown(
-            "\n".join(
-                f"- **{filename}**" for filename in st.session_state.filenames
-            )
+            "\n".join(f"- **{name}**" for name in st.session_state.filenames)
         )
 
     with st.expander("Predefined commands"):
@@ -195,10 +196,12 @@ def setup_helpful_info():
                 f"\t/{name} {info['arg']}\n\n"
             )
 
+    chat_history = serialize_chat_history()
+    filename = f"conversation_{int(time.time())}.json"
     st.download_button(
-        label="Download Conversation",
-        data=get_messages_dump(),
-        file_name=f"chat-history-{time.time()}.json",
+        label="Download Conversation as JSON",
+        data=chat_history,
+        file_name=filename,
         mime="application/json",
         use_container_width=True,
         type="primary",
@@ -207,7 +210,7 @@ def setup_helpful_info():
 
 def setup_feedback_form():
     st.title("Feedback")
-    st.write(st.session_state.config.get("feedback_description"))
+    st.write(st.session_state.config["descriptions"]["feedback"])
 
     subject = st.selectbox(
         "Subject",
@@ -218,24 +221,23 @@ def setup_feedback_form():
             "Other",
         ],
     )
-    feedback = st.text_area("Feedback", height=100)
+    feedback = st.text_area("User Feedback", height=100)
+
     if st.button("Submit", type="primary"):
-        st.session_state.db.collection("feedback").add(
-            {
-                "subject": subject,
-                "feedback": feedback,
-                "timestamp": firestore.SERVER_TIMESTAMP,
-            }
-        )
-        st.success("Feedback submitted successfully!")
+        if feedback:
+            st.session_state.db.collection("feedback").add(
+                {
+                    "subject": subject,
+                    "feedback": feedback,
+                    "timestamp": firestore.SERVER_TIMESTAMP,
+                }
+            )
+            st.success("Feedback submitted successfully!", icon="🚀")
+        else:
+            st.error("Give feedback before submitting.", icon="🙀")
 
 
 def setup_chat():
-    if not st.session_state.messages:
-        st.session_state.history.add_ai_message("How can I help you?")
-
-    view_messages = st.expander("View the message contents in session state")
-
     for message in st.session_state.messages:
         st.chat_message(message.type).write(message.content)
 
@@ -265,13 +267,10 @@ def setup_chat():
         st.session_state.history.add_user_message(prompt)
         st.session_state.history.add_ai_message(response.get("answer"))
 
-    with view_messages:
-        view_messages.json(st.session_state.messages)
-
 
 if __name__ == "__main__":
-    st.set_page_config(page_title="LangChain Q&A with RAG", page_icon="📖")
-    st.title("📖 LangChain Q&A with RAG")
+    st.set_page_config(page_title="Disaster Preparedness Bot", page_icon="🐱‍🚀")
+    st.title("🐱‍🚀 Disaster Preparedness Bot")
 
     st.session_state.setdefault("configured", False)
 
