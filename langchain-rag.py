@@ -200,11 +200,6 @@ def setup_helpful_info():
     st.title("Helpful Information")
     st.write(st.session_state.config["descriptions"]["app"])
 
-    with st.expander("Uploaded files"):
-        st.markdown(
-            "\n".join(f"- **{name}**" for name in st.session_state.filenames)
-        )
-
     with st.expander("Predefined commands"):
         commands = st.session_state.config["commands"]
         for name, info in commands.items():
