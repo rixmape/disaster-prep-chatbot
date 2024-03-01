@@ -256,6 +256,21 @@ def setup_feedback_form():
             st.error("Give feedback before submitting.", icon="🙀")
 
 
+def parse_slash_command(prompt):
+    valid_commands = st.session_state.config["commands"]
+    if prompt.startswith("/"):
+        command, argument = prompt.split(" ", 1)
+        command = command.replace("/", "")
+        if not command in valid_commands.keys():
+            return prompt
+        new_prompt = (
+            f"{valid_commands[command]['description']}\n\n"
+            f"Query: {argument}"
+        )
+        return new_prompt
+    return prompt
+
+
 def setup_chat():
     st.title("🐱‍🚀 Disaster Preparedness Bot")
 
@@ -263,10 +278,11 @@ def setup_chat():
         st.chat_message(message.type).write(message.content)
 
     if prompt := st.chat_input():
-        st.chat_message("human").write(prompt)
+        parsed_prompt = parse_slash_command(prompt)
+        st.chat_message("human").write(parsed_prompt)
         response = st.session_state.chatbot.invoke(
             {
-                "question": prompt,
+                "question": parsed_prompt,
                 "history": st.session_state.messages,
             }
         )
@@ -285,7 +301,7 @@ def setup_chat():
             content = "\n".join([f"> {line}" for line in content.split("\n")])
             citations_container.markdown(f"**{source}**\n{content}")
 
-        st.session_state.history.add_user_message(prompt)
+        st.session_state.history.add_user_message(parsed_prompt)
         st.session_state.history.add_ai_message(response.get("answer"))
 
 
