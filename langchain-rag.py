@@ -122,23 +122,23 @@ def format_docs(docs):
 
 
 def initialize_chatbot():
-    st.write("Initializing message history...")
+    st.write("💬 Initializing message history...")
     st.session_state.history = StreamlitChatMessageHistory(key="messages")
     if not st.session_state.messages:
         initial_message = st.session_state.config["prompts"]["initial"].strip()
         st.session_state.history.add_ai_message(initial_message)
 
-    st.write("Initialize cloud connection...")
+    st.write("🌐 Initialize cloud connection...")
     if not firebase_admin._apps:
         cert = dict(st.secrets["FIREBASE_AUTH"])
         cred = credentials.Certificate(cert)
         opts = {"storageBucket": "streamlit-chatbot-6ee28.appspot.com"}
         firebase_admin.initialize_app(cred, opts)
 
-        st.write("Connecting to user feedback database...")
+        st.write("📢 Connecting to user feedback database...")
         st.session_state.db = firestore.client()
 
-    st.write("Downloading relevant documents...")
+    st.write("📄 Downloading relevant documents...")
     os.makedirs(DOCS_DIR, exist_ok=True)
     bucket = storage.bucket()
     blobs = list(bucket.list_blobs())
@@ -148,10 +148,10 @@ def initialize_chatbot():
         blob.download_to_filename(filename)
         filenames.append(filename)
 
-    st.write("Setting up document retriever...")
+    st.write("🔍 Setting up document retriever...")
     retriever = setup_retriever(filenames)
 
-    st.write("Setting up chatbot pipeline...")
+    st.write("🔗 Setting up chatbot pipeline...")
     chatbot_instruction = " ".join(
         [
             st.session_state.config["prompts"]["main_instruction"].strip(),
@@ -182,7 +182,7 @@ def initialize_chatbot():
         }
     ).assign(answer=rag_chain_from_docs)
 
-    st.write("Finishing chatbot configuration...")
+    st.write("✨ Finishing chatbot configuration...")
 
 
 def serialize_chat_history():
@@ -203,7 +203,7 @@ def setup_sidebar():
 
 
 def setup_helpful_info():
-    st.title("Helpful Information")
+    st.title("💡 Helpful Information")
     st.write(st.session_state.config["descriptions"]["app"])
 
     with st.expander("Predefined commands"):
@@ -228,7 +228,7 @@ def setup_helpful_info():
 
 
 def setup_feedback_form():
-    st.title("Feedback")
+    st.title("📢 Feedback")
     st.write(st.session_state.config["descriptions"]["feedback"])
 
     subject = st.selectbox(
@@ -257,6 +257,8 @@ def setup_feedback_form():
 
 
 def setup_chat():
+    st.title("🐱‍🚀 Disaster Preparedness Bot")
+
     for message in st.session_state.messages:
         st.chat_message(message.type).write(message.content)
 
