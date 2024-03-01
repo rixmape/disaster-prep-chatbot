@@ -8,7 +8,7 @@ from operator import itemgetter
 import firebase_admin
 import streamlit as st
 import yaml
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, storage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.document_loaders import TextLoader
@@ -67,11 +67,11 @@ def setup_configuration():
         st.rerun()
 
 
-def setup_retriever():
+def setup_retriever(filenames):
     docs = []
 
-    for file in st.session_state.filenames:
-        loader = TextLoader(os.path.join(DOCS_DIR, file))
+    for filename in filenames:
+        loader = TextLoader(filename)
         docs.extend(loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -128,15 +128,28 @@ def initialize_chatbot():
         initial_message = st.session_state.config["prompts"]["initial"].strip()
         st.session_state.history.add_ai_message(initial_message)
 
-    st.write("Reading documents...")
-    st.session_state.filenames = [
-        file
-        for file in os.listdir(DOCS_DIR)
-        if file.split(".")[-1] in ["txt", "md"]
-    ]
+    st.write("Initialize cloud connection...")
+    if not firebase_admin._apps:
+        cert = dict(st.secrets["FIREBASE_AUTH"])
+        cred = credentials.Certificate(cert)
+        opts = {"storageBucket": "streamlit-chatbot-6ee28.appspot.com"}
+        firebase_admin.initialize_app(cred, opts)
+
+        st.write("Connecting to user feedback database...")
+        st.session_state.db = firestore.client()
+
+    st.write("Downloading relevant documents...")
+    os.makedirs(DOCS_DIR, exist_ok=True)
+    bucket = storage.bucket()
+    blobs = list(bucket.list_blobs())
+    filenames = []
+    for blob in blobs:
+        filename = f"{DOCS_DIR}/{blob.name}"
+        blob.download_to_filename(filename)
+        filenames.append(filename)
 
     st.write("Setting up document retriever...")
-    retriever = setup_retriever()
+    retriever = setup_retriever(filenames)
 
     st.write("Setting up chatbot pipeline...")
     chatbot_instruction = " ".join(
@@ -168,13 +181,6 @@ def initialize_chatbot():
             "context": prompt_contextualizer | retriever,
         }
     ).assign(answer=rag_chain_from_docs)
-
-    st.write("Connecting to user feedback database...")
-    if not firebase_admin._apps:
-        cert = dict(st.secrets["FIREBASE_AUTH"])
-        cred = credentials.Certificate(cert)
-        firebase_admin.initialize_app(cred)
-        st.session_state.db = firestore.client()
 
     st.write("Finishing chatbot configuration...")
 
