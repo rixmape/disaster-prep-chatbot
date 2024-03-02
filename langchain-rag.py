@@ -135,8 +135,8 @@ def initialize_chatbot():
         opts = {"storageBucket": "streamlit-chatbot-6ee28.appspot.com"}
         firebase_admin.initialize_app(cred, opts)
 
-        st.write("📢 Connecting to user feedback database...")
-        st.session_state.db = firestore.client()
+    st.write("📢 Connecting to user feedback database...")
+    st.session_state.db = firestore.client()
 
     st.write("📄 Downloading relevant documents...")
     os.makedirs(DOCS_DIR, exist_ok=True)
@@ -230,8 +230,9 @@ def setup_helpful_info():
 def setup_feedback_form():
     st.title("📢 Feedback")
     st.write(st.session_state.config["descriptions"]["feedback"])
+    feedback = dict(subject="", content="", history="")
 
-    subject = st.selectbox(
+    feedback["subject"] = st.selectbox(
         "Subject",
         options=[
             "💭 General feedback",
@@ -240,17 +241,15 @@ def setup_feedback_form():
             "📢 Other",
         ],
     )
-    feedback = st.text_area("User Feedback", height=100)
+    feedback["content"] = st.text_area("User Feedback", height=100)
+    is_history_included = st.checkbox("Include chat history in feedback")
+    if is_history_included:
+        feedback["history"] = serialize_chat_history()
 
     if st.button("Submit", type="primary"):
         if feedback:
-            st.session_state.db.collection("feedback").add(
-                {
-                    "subject": subject,
-                    "feedback": feedback,
-                    "timestamp": firestore.SERVER_TIMESTAMP,
-                }
-            )
+            feedback["timestamp"] = firestore.SERVER_TIMESTAMP
+            st.session_state.db.collection("feedback").add(feedback)
             st.success("Feedback submitted successfully!", icon="🚀")
         else:
             st.error("Give feedback before submitting.", icon="🙀")
@@ -264,8 +263,7 @@ def parse_slash_command(prompt):
         if not command in valid_commands.keys():
             return prompt
         new_prompt = (
-            f"{valid_commands[command]['description']}\n\n"
-            f"Query: {argument}"
+            f"{valid_commands[command]['description']}\n\n" f"Query: {argument}"
         )
         return new_prompt
     return prompt
