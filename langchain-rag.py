@@ -234,10 +234,10 @@ def setup_feedback_form():
     subject = st.selectbox(
         "Subject",
         options=[
-            "General feedback",
-            "Feature request",
-            "Bug report",
-            "Other",
+            "💭 General feedback",
+            "🌟 Feature request",
+            "🚨 Bug report",
+            "📢 Other",
         ],
     )
     feedback = st.text_area("User Feedback", height=100)
