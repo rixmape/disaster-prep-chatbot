@@ -8,7 +8,7 @@ from operator import itemgetter
 import firebase_admin
 import streamlit as st
 import yaml
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, storage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_community.document_loaders import TextLoader
@@ -67,11 +67,11 @@ def setup_configuration():
         st.rerun()
 
 
-def setup_retriever():
+def setup_retriever(filenames):
     docs = []
 
-    for file in st.session_state.filenames:
-        loader = TextLoader(os.path.join(DOCS_DIR, file))
+    for filename in filenames:
+        loader = TextLoader(filename)
         docs.extend(loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -122,23 +122,36 @@ def format_docs(docs):
 
 
 def initialize_chatbot():
-    st.write("Initializing message history...")
+    st.write("💬 Initializing message history...")
     st.session_state.history = StreamlitChatMessageHistory(key="messages")
     if not st.session_state.messages:
         initial_message = st.session_state.config["prompts"]["initial"].strip()
         st.session_state.history.add_ai_message(initial_message)
 
-    st.write("Reading documents...")
-    st.session_state.filenames = [
-        file
-        for file in os.listdir(DOCS_DIR)
-        if file.split(".")[-1] in ["txt", "md"]
-    ]
+    st.write("🌐 Initialize cloud connection...")
+    if not firebase_admin._apps:
+        cert = dict(st.secrets["FIREBASE_AUTH"])
+        cred = credentials.Certificate(cert)
+        opts = {"storageBucket": "streamlit-chatbot-6ee28.appspot.com"}
+        firebase_admin.initialize_app(cred, opts)
 
-    st.write("Setting up document retriever...")
-    retriever = setup_retriever()
+        st.write("📢 Connecting to user feedback database...")
+        st.session_state.db = firestore.client()
 
-    st.write("Setting up chatbot pipeline...")
+    st.write("📄 Downloading relevant documents...")
+    os.makedirs(DOCS_DIR, exist_ok=True)
+    bucket = storage.bucket()
+    blobs = list(bucket.list_blobs())
+    filenames = []
+    for blob in blobs:
+        filename = f"{DOCS_DIR}/{blob.name}"
+        blob.download_to_filename(filename)
+        filenames.append(filename)
+
+    st.write("🔍 Setting up document retriever...")
+    retriever = setup_retriever(filenames)
+
+    st.write("🔗 Setting up chatbot pipeline...")
     chatbot_instruction = " ".join(
         [
             st.session_state.config["prompts"]["main_instruction"].strip(),
@@ -169,14 +182,7 @@ def initialize_chatbot():
         }
     ).assign(answer=rag_chain_from_docs)
 
-    st.write("Connecting to user feedback database...")
-    if not firebase_admin._apps:
-        cert = dict(st.secrets["FIREBASE_AUTH"])
-        cred = credentials.Certificate(cert)
-        firebase_admin.initialize_app(cred)
-        st.session_state.db = firestore.client()
-
-    st.write("Finishing chatbot configuration...")
+    st.write("✨ Finishing chatbot configuration...")
 
 
 def serialize_chat_history():
@@ -197,13 +203,8 @@ def setup_sidebar():
 
 
 def setup_helpful_info():
-    st.title("Helpful Information")
+    st.title("💡 Helpful Information")
     st.write(st.session_state.config["descriptions"]["app"])
-
-    with st.expander("Uploaded files"):
-        st.markdown(
-            "\n".join(f"- **{name}**" for name in st.session_state.filenames)
-        )
 
     with st.expander("Predefined commands"):
         commands = st.session_state.config["commands"]
@@ -227,16 +228,16 @@ def setup_helpful_info():
 
 
 def setup_feedback_form():
-    st.title("Feedback")
+    st.title("📢 Feedback")
     st.write(st.session_state.config["descriptions"]["feedback"])
 
     subject = st.selectbox(
         "Subject",
         options=[
-            "General feedback",
-            "Feature request",
-            "Bug report",
-            "Other",
+            "💭 General feedback",
+            "🌟 Feature request",
+            "🚨 Bug report",
+            "📢 Other",
         ],
     )
     feedback = st.text_area("User Feedback", height=100)
@@ -255,15 +256,33 @@ def setup_feedback_form():
             st.error("Give feedback before submitting.", icon="🙀")
 
 
+def parse_slash_command(prompt):
+    valid_commands = st.session_state.config["commands"]
+    if prompt.startswith("/"):
+        command, argument = prompt.split(" ", 1)
+        command = command.replace("/", "")
+        if not command in valid_commands.keys():
+            return prompt
+        new_prompt = (
+            f"{valid_commands[command]['description']}\n\n"
+            f"Query: {argument}"
+        )
+        return new_prompt
+    return prompt
+
+
 def setup_chat():
+    st.title("🐱‍🚀 Disaster Preparedness Bot")
+
     for message in st.session_state.messages:
         st.chat_message(message.type).write(message.content)
 
     if prompt := st.chat_input():
-        st.chat_message("human").write(prompt)
+        parsed_prompt = parse_slash_command(prompt)
+        st.chat_message("human").write(parsed_prompt)
         response = st.session_state.chatbot.invoke(
             {
-                "question": prompt,
+                "question": parsed_prompt,
                 "history": st.session_state.messages,
             }
         )
@@ -282,7 +301,7 @@ def setup_chat():
             content = "\n".join([f"> {line}" for line in content.split("\n")])
             citations_container.markdown(f"**{source}**\n{content}")
 
-        st.session_state.history.add_user_message(prompt)
+        st.session_state.history.add_user_message(parsed_prompt)
         st.session_state.history.add_ai_message(response.get("answer"))
 
 
