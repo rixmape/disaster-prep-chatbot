@@ -24,27 +24,27 @@ os.environ["LANGCHAIN_API_KEY"] = st.secrets.get("LANGCHAIN_API_KEY", "")
 os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGCHAIN_PROJECT", "default")
 os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 
-CONFIG_FILE = "config.yaml"
-DOCS_DIR = "documents"
+CONFIG_FILE_PATH = "config.yaml"
+DOCUMENTS_DIRECTORY = "documents"
 
 # fmt: on
 
 
-def fetch_configuration_file():
-    with open(CONFIG_FILE, "r", encoding="utf-8") as file:
+def load_configuration_file():
+    with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as file:
         return yaml.safe_load(file)
 
 
-def setup_configuration():
-    st.session_state.config = fetch_configuration_file()
+def configure_chatbot():
+    st.session_state.config = load_configuration_file()
     st.write(st.session_state.config["descriptions"]["app"])
     st.subheader("How should I answer your questions?")
 
-    col1, col2 = st.columns([0.4, 0.6])
-    choice = None
+    column1, column2 = st.columns([0.4, 0.6])
+    persona_choice = None
 
-    with col2:
-        choice = st.selectbox(
+    with column2:
+        persona_choice = st.selectbox(
             label="Select a persona:",
             options=[
                 persona["traits"]
@@ -57,26 +57,30 @@ def setup_configuration():
 
         with st.container(border=True):
             st.markdown("**Instruction:**")
-            if choice == "Custom":
-                description = st.text_area(
+            if persona_choice == "Custom":
+                persona_description = st.text_area(
                     label="Chatbot Persona Description:",
                     placeholder="Describe the chatbot's persona...",
                     height=100,
                     label_visibility="collapsed",
                 )
             else:
-                choice = next(
+                selected_persona = next(
                     persona
                     for persona in st.session_state.config["personas"]
-                    if persona["traits"] == choice
+                    if persona["traits"] == persona_choice
                 )
-                description = choice["instruction"].strip()
-                st.markdown(description)
-            st.session_state.persona_desc = description
+                persona_description = selected_persona["instruction"].strip()
+                st.markdown(persona_description)
+            st.session_state.persona_desc = persona_description
 
-    with col1, st.container(border=True):
+    with column1, st.container(border=True):
         st.image(
-            ("images/default.png" if choice == "Custom" else choice["image"]),
+            (
+                "images/default.png"
+                if persona_choice == "Custom"
+                else selected_persona["image"]
+            ),
             use_column_width=True,
         )
 
@@ -87,29 +91,32 @@ def setup_configuration():
         st.rerun()
 
 
-def setup_retriever(filenames):
-    docs = []
+def initialize_document_retriever(document_filenames):
+    documents = []
 
-    for filename in filenames:
-        loader = TextLoader(filename)
-        docs.extend(loader.load())
+    for filename in document_filenames:
+        document_loader = TextLoader(filename)
+        documents.extend(document_loader.load())
 
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=1500,
         chunk_overlap=200,
     )
 
-    splits = text_splitter.split_documents(docs)
-    embeddings = OpenAIEmbeddings()
-    vectordb = Chroma.from_documents(splits, embeddings)
+    document_splits = text_splitter.split_documents(documents)
+    document_embeddings = OpenAIEmbeddings()
+    vector_database = Chroma.from_documents(
+        document_splits,
+        document_embeddings,
+    )
 
-    return vectordb.as_retriever(
+    return vector_database.as_retriever(
         search_type="mmr",
         search_kwargs={"k": 4, "fetch_k": 4},
     )
 
 
-def prompt_contextualizer(input):
+def contextualize_prompt(input):
     if not input["history"]:
         return input["question"]
 
@@ -131,11 +138,11 @@ def prompt_contextualizer(input):
     return prompt_template | ChatOpenAI() | StrOutputParser()
 
 
-def format_docs(docs):
+def format_documents_for_prompt(documents):
     context = "\n\n".join(
         [
             f'Document {i}:\n\n"""\n{doc.page_content}\n"""'
-            for i, doc in enumerate(docs, start=1)
+            for i, doc in enumerate(documents, start=1)
         ]
     )
     return f"Use the following documents to answer the query.\n\n{context}"
@@ -143,33 +150,38 @@ def format_docs(docs):
 
 def initialize_chatbot():
     st.write("💬 Initializing message history...")
-    st.session_state.history = StreamlitChatMessageHistory(key="messages")
+    st.session_state.message_history = StreamlitChatMessageHistory(
+        key="messages",
+    )
     if not st.session_state.messages:
         initial_message = st.session_state.config["prompts"]["initial"].strip()
-        st.session_state.history.add_ai_message(initial_message)
+        st.session_state.message_history.add_ai_message(initial_message)
 
     st.write("🌐 Initialize cloud connection...")
     if not firebase_admin._apps:
-        cert = dict(st.secrets["FIREBASE_AUTH"])
-        cred = credentials.Certificate(cert)
-        opts = {"storageBucket": "streamlit-chatbot-6ee28.appspot.com"}
-        firebase_admin.initialize_app(cred, opts)
+        firebase_auth = dict(st.secrets["FIREBASE_AUTH"])
+        firebase_credentials = credentials.Certificate(firebase_auth)
+        firebase_admin.initialize_app(
+            firebase_credentials,
+            {"storageBucket": "streamlit-chatbot-6ee28.appspot.com"},
+        )
 
     st.write("📢 Connecting to user feedback database...")
-    st.session_state.db = firestore.client()
+    firestore_client = firestore.client()
+    st.session_state.feedback_database = firestore_client.collection("feedback")
 
     st.write("📄 Downloading relevant documents...")
-    os.makedirs(DOCS_DIR, exist_ok=True)
-    bucket = storage.bucket()
-    blobs = list(bucket.list_blobs())
-    filenames = []
-    for blob in blobs:
-        filename = f"{DOCS_DIR}/{blob.name}"
+    os.makedirs(DOCUMENTS_DIRECTORY, exist_ok=True)
+    storage_bucket = storage.bucket()
+    storage_blobs = list(storage_bucket.list_blobs())
+    document_filenames = []
+    for blob in storage_blobs:
+        filename = f"{DOCUMENTS_DIRECTORY}/{blob.name}"
         blob.download_to_filename(filename)
-        filenames.append(filename)
+        document_filenames.append(filename)
 
     st.write("🔍 Setting up document retriever...")
-    retriever = setup_retriever(filenames)
+    document_retriever = initialize_document_retriever(document_filenames)
 
     st.write("🔗 Setting up chatbot pipeline...")
     chatbot_instruction = " ".join(
@@ -186,9 +198,9 @@ def initialize_chatbot():
             ("human", "{question}"),
         ]
     )
-    rag_chain_from_docs = (
+    rag_chain_from_documents = (
         RunnablePassthrough.assign(
-            context=(lambda docs: format_docs(docs["context"]))
+            context=(lambda docs: format_documents_for_prompt(docs["context"]))
         )
         | prompt_template
         | ChatOpenAI()
@@ -198,14 +210,14 @@ def initialize_chatbot():
         {
             "question": itemgetter("question"),
             "history": itemgetter("history"),
-            "context": prompt_contextualizer | retriever,
+            "context": contextualize_prompt | document_retriever,
         }
-    ).assign(answer=rag_chain_from_docs)
+    ).assign(answer=rag_chain_from_documents)
 
     st.write("✨ Finishing chatbot configuration...")
 
 
-def serialize_chat_history():
+def convert_chat_history_to_json():
     return json.dumps(
         [
             {"type": message.type, "content": message.content}
@@ -215,31 +227,31 @@ def serialize_chat_history():
     )
 
 
-def setup_sidebar():
+def configure_sidebar():
     with st.sidebar:
-        setup_helpful_info()
+        display_helpful_info()
         st.divider()
-        setup_feedback_form()
+        display_feedback_form()
 
 
-def setup_helpful_info():
+def display_helpful_info():
     st.title("💡 Helpful Information")
     st.write(st.session_state.config["descriptions"]["app"])
 
     with st.expander("Predefined commands"):
         commands = st.session_state.config["commands"]
-        for name, info in commands.items():
+        for command_name, command_info in commands.items():
             st.markdown(
-                f":green[**{name}**] : {info['description']}\n\n"
+                f":green[**{command_name}**] : {command_info['description']}\n\n"
                 "Sample usage:\n\n"
-                f"\t/{name} {info['arg']}\n\n"
+                f"\t/{command_name} {command_info['arg']}\n\n"
             )
 
-    chat_history = serialize_chat_history()
+    chat_history_json = convert_chat_history_to_json()
     filename = f"conversation_{int(time.time())}.json"
     st.download_button(
         label="Download Conversation as JSON",
-        data=chat_history,
+        data=chat_history_json,
         file_name=filename,
         mime="application/json",
         use_container_width=True,
@@ -247,7 +259,7 @@ def setup_helpful_info():
     )
 
 
-def setup_feedback_form():
+def display_feedback_form():
     st.title("📢 Feedback")
     st.write(st.session_state.config["descriptions"]["feedback"])
     feedback = dict(subject="", content="", history="")
@@ -262,43 +274,43 @@ def setup_feedback_form():
         ],
     )
     feedback["content"] = st.text_area("User Feedback", height=100)
-    is_history_included = st.checkbox("Include chat history in feedback")
-    if is_history_included:
-        feedback["history"] = serialize_chat_history()
+    include_chat_history = st.checkbox("Include chat history in feedback")
+    if include_chat_history:
+        feedback["history"] = convert_chat_history_to_json()
 
     if st.button("Submit", type="primary"):
         if feedback:
             feedback["timestamp"] = firestore.SERVER_TIMESTAMP
-            st.session_state.db.collection("feedback").add(feedback)
+            st.session_state.feedback_database.add(feedback)
             st.success("Feedback submitted successfully!", icon="🚀")
         else:
             st.error("Give feedback before submitting.", icon="🙀")
 
 
-def parse_slash_command(prompt):
+def interpret_slash_command(prompt):
     valid_commands = st.session_state.config["commands"]
     if prompt.startswith("/"):
         command, argument = prompt.split(" ", 1)
         command = command.replace("/", "")
         if not command in valid_commands.keys():
             return prompt
-        new_prompt = (
+        interpreted_prompt = (
             f"{valid_commands[command]['description']}\n\n" f"Query: {argument}"
         )
-        return new_prompt
+        return interpreted_prompt
     return prompt
 
 
-def setup_chat():
+def configure_chat():
     for message in st.session_state.messages:
         st.chat_message(message.type).write(message.content)
 
-    if prompt := st.chat_input():
-        parsed_prompt = parse_slash_command(prompt)
-        st.chat_message("human").write(parsed_prompt)
+    if user_input := st.chat_input():
+        interpreted_input = interpret_slash_command(user_input)
+        st.chat_message("human").write(interpreted_input)
         response = st.session_state.chatbot.invoke(
             {
-                "question": parsed_prompt,
+                "question": interpreted_input,
                 "history": st.session_state.messages,
             }
         )
@@ -306,19 +318,19 @@ def setup_chat():
         ai_message = st.chat_message("ai")
         ai_message.write(response.get("answer"))
 
-        citations = response.get("context")
+        file_citations = response.get("context")
         citations_container = ai_message.expander(
-            f"File Citations ({len(citations)}):",
+            f"File Citations ({len(file_citations)}):",
             expanded=False,
         )
-        for citation in response.get("context"):
+        for citation in file_citations:
             source = citation.metadata.get("source")
             content = citation.page_content.replace("#", "")
             content = "\n".join([f"> {line}" for line in content.split("\n")])
             citations_container.markdown(f"**{source}**\n{content}")
 
-        st.session_state.history.add_user_message(parsed_prompt)
-        st.session_state.history.add_ai_message(response.get("answer"))
+        st.session_state.message_history.add_user_message(interpreted_input)
+        st.session_state.message_history.add_ai_message(response.get("answer"))
 
 
 if __name__ == "__main__":
@@ -328,7 +340,7 @@ if __name__ == "__main__":
     st.session_state.setdefault("is_configured_by_user", False)
 
     if not st.session_state.is_configured_by_user:
-        setup_configuration()
+        configure_chatbot()
     else:
-        setup_sidebar()
-        setup_chat()
+        configure_sidebar()
+        configure_chat()
