@@ -9,14 +9,13 @@ import firebase_admin
 import streamlit as st
 import yaml
 from firebase_admin import credentials, firestore, storage
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
-from langchain_community.document_loaders import TextLoader
-from langchain_community.vectorstores import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
+
+from document_manager import DocumentManager
 
 os.environ["LANGCHAIN_TRACING_V2"] = st.secrets.get("LANGCHAIN_TRACING_V2", "false")
 os.environ["LANGCHAIN_ENDPOINT"] = st.secrets.get("LANGCHAIN_ENDPOINT", "https://api.langchain.com")
@@ -25,7 +24,6 @@ os.environ["LANGCHAIN_PROJECT"] = st.secrets.get("LANGCHAIN_PROJECT", "default")
 os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
 
 CONFIG_FILE_PATH = "config.yaml"
-DOCUMENTS_DIRECTORY = "documents"
 
 # fmt: on
 
@@ -91,31 +89,6 @@ def configure_chatbot():
         st.rerun()
 
 
-def initialize_document_retriever(document_filenames):
-    documents = []
-
-    for filename in document_filenames:
-        document_loader = TextLoader(filename)
-        documents.extend(document_loader.load())
-
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1500,
-        chunk_overlap=200,
-    )
-
-    document_splits = text_splitter.split_documents(documents)
-    document_embeddings = OpenAIEmbeddings()
-    vector_database = Chroma.from_documents(
-        document_splits,
-        document_embeddings,
-    )
-
-    return vector_database.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": 4, "fetch_k": 4},
-    )
-
-
 def contextualize_prompt(input):
     if not input["history"]:
         return input["question"]
@@ -170,18 +143,9 @@ def initialize_chatbot():
     firestore_client = firestore.client()
     st.session_state.feedback_database = firestore_client.collection("feedback")
 
-    st.write("📄 Downloading relevant documents...")
-    os.makedirs(DOCUMENTS_DIRECTORY, exist_ok=True)
+    st.write("🔍 Setting up document manager...")
     storage_bucket = storage.bucket()
-    storage_blobs = list(storage_bucket.list_blobs())
-    document_filenames = []
-    for blob in storage_blobs:
-        filename = f"{DOCUMENTS_DIRECTORY}/{blob.name}"
-        blob.download_to_filename(filename)
-        document_filenames.append(filename)
-
-    st.write("🔍 Setting up document retriever...")
-    document_retriever = initialize_document_retriever(document_filenames)
+    document_manager = DocumentManager(storage_bucket)
 
     st.write("🔗 Setting up chatbot pipeline...")
     chatbot_instruction = " ".join(
@@ -210,7 +174,7 @@ def initialize_chatbot():
         {
             "question": itemgetter("question"),
             "history": itemgetter("history"),
-            "context": contextualize_prompt | document_retriever,
+            "context": contextualize_prompt | document_manager.retriever,
         }
     ).assign(answer=rag_chain_from_documents)
 
