@@ -30,35 +30,55 @@ DOCS_DIR = "documents"
 # fmt: on
 
 
-def setup_configuration():
+def fetch_configuration_file():
     with open(CONFIG_FILE, "r", encoding="utf-8") as file:
-        st.session_state.config = yaml.safe_load(file)
+        return yaml.safe_load(file)
 
-    st.title("🐱‍🚀 Disaster Preparedness Bot")
+
+def setup_configuration():
+    st.session_state.config = fetch_configuration_file()
     st.write(st.session_state.config["descriptions"]["app"])
-
     st.subheader("How should I answer your questions?")
+
     col1, col2 = st.columns([0.4, 0.6])
-    personas = st.session_state.config["personas"]
-    with col1:
-        selected_persona = st.radio(
+    choice = None
+
+    with col2:
+        choice = st.selectbox(
             label="Select a persona:",
-            options=list(personas.keys()) + ["Custom"],
+            options=[
+                persona["traits"]
+                for persona in st.session_state.config["personas"]
+            ]
+            + ["Custom"],
             label_visibility="collapsed",
+            format_func=lambda x: x.title(),
         )
-    with col2, st.container(border=True):
-        st.markdown("**Instruction:**")
-        if selected_persona == "Custom":
-            description = st.text_area(
-                label="Chatbot Persona Description:",
-                placeholder="Describe the chatbot's persona...",
-                height=100,
-                label_visibility="collapsed",
-            )
-        else:
-            description = personas[selected_persona].strip()
-            st.markdown(description)
-    st.session_state.persona_desc = description
+
+        with st.container(border=True):
+            st.markdown("**Instruction:**")
+            if choice == "Custom":
+                description = st.text_area(
+                    label="Chatbot Persona Description:",
+                    placeholder="Describe the chatbot's persona...",
+                    height=100,
+                    label_visibility="collapsed",
+                )
+            else:
+                choice = next(
+                    persona
+                    for persona in st.session_state.config["personas"]
+                    if persona["traits"] == choice
+                )
+                description = choice["instruction"].strip()
+                st.markdown(description)
+            st.session_state.persona_desc = description
+
+    with col1, st.container(border=True):
+        st.image(
+            ("images/default.png" if choice == "Custom" else choice["image"]),
+            use_column_width=True,
+        )
 
     if st.button("Start chatting!"):
         with st.status("Initializing chatbot...", expanded=True):
@@ -270,8 +290,6 @@ def parse_slash_command(prompt):
 
 
 def setup_chat():
-    st.title("🐱‍🚀 Disaster Preparedness Bot")
-
     for message in st.session_state.messages:
         st.chat_message(message.type).write(message.content)
 
@@ -305,6 +323,8 @@ def setup_chat():
 
 if __name__ == "__main__":
     st.set_page_config(page_title="Disaster Preparedness Bot", page_icon="🐱‍🚀")
+    st.title("🐱‍🚀 Disaster Preparedness Bot")
+
     st.session_state.setdefault("is_configured_by_user", False)
 
     if not st.session_state.is_configured_by_user:

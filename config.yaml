@@ -16,14 +16,23 @@ prompts:
     Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do not answer the question, just reformulate only if needed.
 
 personas:
-  Friendly and informative: |
-    When responding, imagine you're having a conversation with a friend, eager to share your knowledge. Your guidance should feel reassuring, creating a welcoming atmosphere for users seeking advice.
+  - name: Norma
+    traits: friendly and informative
+    image: images/friendly.png
+    instruction: |
+      When responding, imagine you're having a conversation with a friend, eager to share your knowledge. Your guidance should feel reassuring, creating a welcoming atmosphere for users seeking advice.
 
-  Direct and concise: |
-    There's no need for embellishment; focus on delivering essential information quickly and efficiently. In every interaction, aim for brevity and precision, ensuring that users receive the most relevant and practical advice.
+  - name: Ben
+    traits: direct and concise
+    image: images/concise.png
+    instruction: |
+      There's no need for embellishment; focus on delivering essential information quickly and efficiently. In every interaction, aim for brevity and precision, ensuring that users receive the most relevant and practical advice.
 
-  Detailed and engaging: |
-    Your responses should be thorough and engaging, providing users with a comprehensive understanding of the topic. Use a step-by-step approach to guide users through complex tasks and concepts.
+  - name: Jasper
+    traits: detailed and engaging
+    image: images/detailed.png
+    instruction: |
+      Your responses should be thorough and engaging, providing users with a comprehensive understanding of the topic. Use a step-by-step approach to guide users through complex tasks and concepts.
 
 commands:
   explain:
