@@ -1,6 +1,6 @@
 import streamlit as st
 
-from chatbot import Chatbot
+from chatbot import ChatbotAgent
 
 if __name__ == "__main__":
     st.set_page_config(page_title="Disaster Preparedness Bot", page_icon="🐱‍🚀")
@@ -8,6 +8,6 @@ if __name__ == "__main__":
 
     st.session_state.setdefault("chatbot", None)
     if not st.session_state.chatbot:  # Avoid reinitializing the chatbot
-        st.session_state.chatbot = Chatbot()
+        st.session_state.chatbot = ChatbotAgent()
 
     st.session_state.chatbot.run()

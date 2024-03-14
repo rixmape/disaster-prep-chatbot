@@ -1,3 +1,5 @@
+# fmt: off
+
 import json
 import os
 import time
@@ -15,8 +17,75 @@ from langchain_openai import ChatOpenAI
 
 from document_manager import DocumentManager
 
+# fmt: on
 
-class Chatbot:
+
+class ChatbotPipeline:
+    def __init__(self, config, chatbot_instruction, document_manager):
+        self.config = config
+        self.chatbot_instruction = chatbot_instruction
+        self.document_manager = document_manager
+        self.pipeline = self.initialize_pipeline()
+
+    def format_documents(self, documents):
+        context = "\n\n".join(
+            [
+                f'Document {i}:\n\n"""\n{doc.page_content}\n"""'
+                for i, doc in enumerate(documents, start=1)
+            ]
+        )
+        return f"Use the following documents to answer the query.\n\n{context}"
+
+    def process_input(self, input):
+        """Process user input to generate context-aware prompts."""
+        if not input["history"]:
+            return input["question"]
+
+        # FIX: Can't access session state. Hardcoding the prompt for now.
+        prompt = (
+            "Given a chat history and the latest user question which might"
+            " reference context in the chat history, formulate a standalone"
+            " question which can be understood without the chat history. Do"
+            " not answer the question, just reformulate only if needed."
+        )
+        prompt_template = ChatPromptTemplate.from_messages(
+            [
+                ("system", prompt),
+                MessagesPlaceholder(variable_name="history"),
+                ("human", "{question}"),
+            ]
+        )
+        return prompt_template | ChatOpenAI() | StrOutputParser()
+
+    def initialize_pipeline(self):
+        prompt_template = ChatPromptTemplate.from_messages(
+            [
+                ("system", f"{self.chatbot_instruction}\n\n{{context}}"),
+                MessagesPlaceholder(variable_name="history"),
+                ("human", "{question}"),
+            ]
+        )
+        rag_chain_from_documents = (
+            RunnablePassthrough.assign(
+                context=(lambda docs: self.format_documents(docs["context"]))
+            )
+            | prompt_template
+            | ChatOpenAI()
+            | StrOutputParser()
+        )
+        return RunnableParallel(
+            {
+                "question": itemgetter("question"),
+                "history": itemgetter("history"),
+                "context": self.process_input | self.document_manager.retriever,
+            }
+        ).assign(answer=rag_chain_from_documents)
+
+    def invoke(self, data):
+        return self.pipeline.invoke(data)
+
+
+class ChatbotAgent:
     def __init__(self):
         self.load_env_variables()
         self.load_config()
@@ -119,35 +188,15 @@ class Chatbot:
         document_manager = DocumentManager(storage_bucket)
 
         st.write("🔗 Setting up chatbot pipeline...")
-        chatbot_instruction = " ".join(
-            [
-                self.config["prompts"]["main_instruction"].strip(),
-                self.persona_instruction,
-                "{context}",
-            ]
+        chatbot_instruction = (
+            self.config["prompts"]["main_instruction"]
+            + self.persona_instruction
         )
-        prompt_template = ChatPromptTemplate.from_messages(
-            [
-                ("system", chatbot_instruction),
-                MessagesPlaceholder(variable_name="history"),
-                ("human", "{question}"),
-            ]
+        self.chatbot_pipeline = ChatbotPipeline(
+            self.config,
+            chatbot_instruction,
+            document_manager,
         )
-        rag_chain_from_documents = (
-            RunnablePassthrough.assign(
-                context=(lambda docs: self.format_documents(docs["context"]))
-            )
-            | prompt_template
-            | ChatOpenAI()
-            | StrOutputParser()
-        )
-        self.chatbot_pipeline = RunnableParallel(
-            {
-                "question": itemgetter("question"),
-                "history": itemgetter("history"),
-                "context": self.process_input | document_manager.retriever,
-            }
-        ).assign(answer=rag_chain_from_documents)
 
         st.write("✨ Finishing chatbot configuration...")
 
@@ -160,27 +209,6 @@ class Chatbot:
             ]
         )
         return f"Use the following documents to answer the query.\n\n{context}"
-
-    def process_input(self, input):
-        """Process user input to generate context-aware prompts."""
-        if not input["history"]:
-            return input["question"]
-
-        # FIX: Can't access session state. Hardcoding the prompt for now.
-        prompt = (
-            "Given a chat history and the latest user question which might"
-            " reference context in the chat history, formulate a standalone"
-            " question which can be understood without the chat history. Do"
-            " not answer the question, just reformulate only if needed."
-        )
-        prompt_template = ChatPromptTemplate.from_messages(
-            [
-                ("system", prompt),
-                MessagesPlaceholder(variable_name="history"),
-                ("human", "{question}"),
-            ]
-        )
-        return prompt_template | ChatOpenAI() | StrOutputParser()
 
     def configure_chat(self):
         """Configure the Streamlit UI components for the chat interface."""
