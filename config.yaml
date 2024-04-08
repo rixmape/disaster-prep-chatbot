@@ -1,3 +1,14 @@
+parameters:
+  embedding_model: text-embedding-3-small
+  embedding_dimensions: 512
+  embedding_chunk_size: 512
+  embedding_chunk_overlap: 128
+
+  allowed_file_types: [txt, md]
+  search_type: mmr
+  docs_to_use: 4
+  docs_to_process: 50
+
 descriptions:
   app: |
     Our chatbot provides community-specific disaster preparedness information by leveraging large language models and a local information database. It is designed to deliver accurate and actionable guidance tailored to your immediate needs during emergency situations.
