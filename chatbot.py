@@ -184,8 +184,7 @@ class ChatbotAgent:
         self.feedback_database = firestore_client.collection("feedback")
 
         st.write("🔍 Setting up document manager...")
-        storage_bucket = storage.bucket()
-        document_manager = DocumentManager(storage_bucket)
+        document_manager = DocumentManager(self.config)
 
         st.write("🔗 Setting up chatbot pipeline...")
         chatbot_instruction = (

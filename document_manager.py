@@ -1,46 +1,57 @@
 import os
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
-from langchain_community.vectorstores import Chroma
+from langchain_community.document_loaders.text import TextLoader
 from langchain_openai import OpenAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
 
 
 class DocumentManager:
-    def __init__(self, storage_bucket, document_directory="documents"):
-        self.storage_bucket = storage_bucket
-        self.document_directory = document_directory
-        self.document_filenames = self.download_documents()
-        self.retriever = self.initialize_retriever()
+    def __init__(self, configuration):
+        self.config = configuration
 
-    def download_documents(self):
-        os.makedirs(self.document_directory, exist_ok=True)
-        storage_blobs = list(self.storage_bucket.list_blobs())
-        document_filenames = []
-        for blob in storage_blobs:
-            filename = f"{self.document_directory}/{blob.name}"
-            blob.download_to_filename(filename)
-            document_filenames.append(filename)
-        return document_filenames
+        self.embedding_model = self.initialize_embedding_model()
+        self.vectorstore = self.initialize_vectorstore()
+        self.retriever = self.get_retriever()
 
-    def initialize_retriever(self):
-        documents = []
-        for filename in self.document_filenames:
-            document_loader = TextLoader(filename)
-            documents.extend(document_loader.load())
+    def initialize_embedding_model(self):
+        return OpenAIEmbeddings(
+            model=self.config["parameters"]["embedding_model"],
+            dimensions=self.config["parameters"]["embedding_dimensions"],
+        )
 
+    def initialize_vectorstore(self):
+        return PineconeVectorStore(
+            index_name=os.getenv("PINECONE_INDEX_NAME"),
+            embedding=self.embedding_model,
+        )
+
+    def get_retriever(self):
+        return self.vectorstore.as_retriever(
+            search_type=self.config["parameters"]["search_type"],
+            search_kwargs={
+                "k": self.config["parameters"]["docs_to_use"],
+                "fetch_k": self.config["parameters"]["docs_to_process"],
+            },
+        )
+
+    def get_documents(self, path="documents", limit=None):
+        docs = []
+        valid_file_types = self.config["parameters"]["allowed_file_types"]
+        for filename in os.listdir(path)[:limit]:
+            file_type = filename.split(".")[-1]
+            if file_type not in valid_file_types:
+                continue
+            doc_loader = TextLoader(
+                os.path.join(path, filename),
+                encoding="utf-8",
+            )
+            docs.extend(doc_loader.load())
+        return docs
+
+    def split_documents(self, documents):
         text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1500,
-            chunk_overlap=200,
+            chunk_size=self.config["parameters"]["embedding_chunk_size"],
+            chunk_overlap=self.config["parameters"]["embedding_chunk_overlap"],
         )
-        document_splits = text_splitter.split_documents(documents)
-        document_embeddings = OpenAIEmbeddings()
-        vector_database = Chroma.from_documents(
-            document_splits,
-            document_embeddings,
-        )
-
-        return vector_database.as_retriever(
-            search_type="mmr",
-            search_kwargs={"k": 4, "fetch_k": 4},
-        )
+        return text_splitter.split_documents(documents)
