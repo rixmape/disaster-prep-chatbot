@@ -7,7 +7,7 @@ if __name__ == "__main__":
     st.title("🐱‍🚀 Disaster Preparedness Bot")
 
     st.session_state.setdefault("chatbot", None)
-    if not st.session_state.chatbot:  # Avoid reinitializing the chatbot
+    if not st.session_state.chatbot:
         st.session_state.chatbot = ChatbotAgent()
 
     st.session_state.chatbot.run()
