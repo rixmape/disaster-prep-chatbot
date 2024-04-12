@@ -1,23 +1,21 @@
-# fmt: off
-
 import json
 import os
 import time
-import yaml
 from operator import itemgetter
 
 import firebase_admin
 import streamlit as st
-from firebase_admin import credentials, firestore, storage
-from langchain_community.chat_message_histories import StreamlitChatMessageHistory
+import yaml
+from firebase_admin import credentials, firestore
+from langchain_community.chat_message_histories import (
+    StreamlitChatMessageHistory,
+)
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough
 from langchain_openai import ChatOpenAI
 
 from document_manager import DocumentManager
-
-# fmt: on
 
 
 class ChatbotPipeline:
@@ -27,30 +25,19 @@ class ChatbotPipeline:
         self.document_manager = document_manager
         self.pipeline = self.initialize_pipeline()
 
-    def format_documents(self, documents):
-        context = "\n\n".join(
-            [
-                f'Document {i}:\n\n"""\n{doc.page_content}\n"""'
-                for i, doc in enumerate(documents, start=1)
-            ]
-        )
-        return f"Use the following documents to answer the query.\n\n{context}"
+    def format_documents(self, docs):
+        """Format documents for the chatbot pipeline."""
+        context = "\n\n".join([f'"""\n{doc.page_content}\n"""' for doc in docs])
+        return f"Use these documents to answer the query.\n\n{context}"
 
     def process_input(self, input):
         """Process user input to generate context-aware prompts."""
         if not input["history"]:
             return input["question"]
 
-        # FIX: Can't access session state. Hardcoding the prompt for now.
-        prompt = (
-            "Given a chat history and the latest user question which might"
-            " reference context in the chat history, formulate a standalone"
-            " question which can be understood without the chat history. Do"
-            " not answer the question, just reformulate only if needed."
-        )
         prompt_template = ChatPromptTemplate.from_messages(
             [
-                ("system", prompt),
+                ("system", self.config["prompts"]["expand"]),
                 MessagesPlaceholder(variable_name="history"),
                 ("human", "{question}"),
             ]

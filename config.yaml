@@ -23,6 +23,9 @@ prompts:
   initial: |
     Hello! Your disaster preparedness companion is here. Try asking me questions about Barangay Tinago, Ligao City. I have a wealth of information about disaster preparedness in your area.
 
+  expand: |
+    Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do not answer the question, just reformulate only if needed.
+
   contextualize: |
     Given a chat history and the latest user question which might reference context in the chat history, formulate a standalone question which can be understood without the chat history. Do not answer the question, just reformulate only if needed.
 
