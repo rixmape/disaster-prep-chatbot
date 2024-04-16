@@ -202,11 +202,12 @@ class ChatbotAgent:
             st.chat_message(message.type).write(message.content)
 
         if user_input := st.chat_input():
-            interpreted_input = self.interpret_slash_command(user_input)
-            st.chat_message("human").write(interpreted_input)
+            st.chat_message("human").write(user_input)
+
+            parsed_input = self.parse_user_input(user_input)
             response = self.chatbot_pipeline.invoke(
                 {
-                    "question": interpreted_input,
+                    "question": parsed_input,
                     "history": self.chat_history.messages,
                 }
             )
@@ -227,21 +228,22 @@ class ChatbotAgent:
                 )
                 citations_container.markdown(f"**{source}**\n{content}")
 
-            self.chat_history.add_user_message(interpreted_input)
+            self.chat_history.add_user_message(parsed_input)
             self.chat_history.add_ai_message(response.get("answer"))
 
-    def interpret_slash_command(self, prompt):
+    def parse_user_input(self, prompt):
+        """Interpret user input based on predefined commands."""
         valid_commands = self.config["commands"]
         if prompt.startswith("/"):
             command, argument = prompt.split(" ", 1)
             command = command.replace("/", "")
             if not command in valid_commands.keys():
                 return prompt
-            interpreted_prompt = (
+            parsed_input = (
                 f"{valid_commands[command]['description']}\n\n"
                 f"Query: {argument}"
             )
-            return interpreted_prompt
+            return parsed_input
         return prompt
 
     def display_sidebar(self):
