@@ -249,6 +249,7 @@ class ChatbotAgent:
     def display_sidebar(self):
         """Manage sidebar content with helpful information and feedback form."""
         with st.sidebar:
+            st.image("images/dipcy.png")
             self.display_helpful_info()
             st.divider()
             self.display_feedback_form()
